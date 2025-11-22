@@ -1,0 +1,366 @@
+{
+  "tabs": {
+    "log": "Log",
+    "goals": "Goals",
+    "history": "Stats",
+    "settings": "Settings",
+    "map": "Smoke-free zones",
+    "dashboard": "Dashboard"
+  },
+  "common": {
+    "error": "Error",
+    "cancel": "Cancel",
+    "save": "Save"
+  },
+  "auth": {
+    "signInTitle": "Sign in",
+    "signInSubtitle": "Welcome back. Please sign in to continue.",
+    "email": "Email",
+    "password": "Password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in...",
+    "createAccount": "Create account",
+    "signupTitle": "Create account",
+    "signupSubtitle": "Sign up with your email and password. A verification email will be sent.",
+    "nicknamePlaceholder": "Nickname (optional)",
+    "signUp": "Sign up",
+    "creatingAccount": "Creating account...",
+    "verifyTitle": "Verify email",
+    "verifyBody": "We sent a verification link to your email. Please check it and sign in again."
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "activeGoals": "Active goals",
+    "noActive": "No active goals.",
+    "quickActions": "Quick actions",
+    "tiles": {
+      "log": "Log",
+      "goals": "Goals",
+      "history": "Stats",
+      "map": "Map",
+      "settings": "Settings"
+    },
+    "signOut": "Sign out"
+  },
+  "log": {
+    "title": "Today's log",
+    "noFailures": "You haven't smoked at all today! Amazing!",
+    "loggedToday": "You logged {{count}} {{count, plural, one {cigarette} other {cigarettes}}} today",
+    "invalidCountTitle": "Invalid input",
+    "invalidCountBody": "Please enter a valid number.",
+    "addError": "Failed to add log entry.",
+    "removeError": "Failed to delete log entry.",
+    "noEntries": "No log entries for this date. Tap the + button to record any cigarettes you smoked.",
+    "cigarettesCount": "{{count}} {{count, plural, one {cigarette} other {cigarettes}}}",
+    "addButton": "Add cigarette log",
+    "logEntry": "Log",
+    "howMany": "Number of cigarettes",
+    "redMean": {
+      "noFailures": "You were perfect today. Keep this streak going.",
+      "todayWeakness": "Today's weakness: {{count}} {{count, plural, one {cigarette} other {cigarettes}}}",
+      "noEntries": "No entries yet. Today can still be the day you become stronger.",
+      "logFailure": "Log",
+      "confirmFailure": "Confirm log",
+      "howMany": "How many cigarettes did you smoke?"
+    }
+  },
+  "map": {
+    "title": "Smoke-free zone map",
+    "useMyLocation": "Use my location",
+    "addZone": "Add smoke-free zone",
+    "zoneTitle": "Name",
+    "zoneDescription": "Description",
+    "save": "Save",
+    "cancel": "Cancel",
+    "loading": "Loading map...",
+    "noZones": "There are no registered zones in this area.",
+    "locationPermissionTitle": "Location permission",
+    "locationPermissionBody": "We need your location to show smoke-free zones around you.",
+    "added": "Zone added.",
+    "addFailed": "Failed to add zone.",
+    "realtime": "Realtime updates enabled",
+    "chooseLocation": "Choose location",
+    "pickOnMap": "Pick on map",
+    "exitSelectMode": "Exit selection",
+    "confirmCenter": "Select here",
+    "viewZones": "View zones",
+    "zonesList": "Zone list",
+    "centerHere": "Center here",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteTitle": "Delete zone",
+    "deleteConfirm": "Are you sure you want to delete this zone?"
+  },
+  "history": {
+    "title": "📊 Stats",
+    "subtitle": "See your progress over time.",
+    "progressOverview": "Progress overview",
+    "weekly": "📊 Weekly",
+    "monthly": "📈 Monthly",
+    "stats": {
+      "total": "Total",
+      "avgPerDay": "Average per day",
+      "trend": "Trend",
+      "dayStreak": "Streak"
+    },
+    "titles": {
+      "week": "This week's progress",
+      "weekRed": "This week's records",
+      "month": "Monthly trend",
+      "monthRed": "Monthly record trend"
+    },
+    "change": {
+      "increase": "Increase",
+      "decrease": "Decrease",
+      "better": "Better",
+      "worse": "Worse"
+    },
+    "calendar": {
+      "title": "Calendar log",
+      "titleRed": "Battle calendar"
+    },
+    "units": {
+      "cigarettes": "{{count}} {{count, plural, one {cigarette} other {cigarettes}}}"
+    },
+    "legend": {
+      "smokeFree": "Smoke free",
+      "light": "Light (1-3)",
+      "heavy": "Heavy (4+)",
+      "strong": "Strong",
+      "weak": "Weak",
+      "failed": "Failed"
+    },
+    "summary": {
+      "title": "Progress summary",
+      "titleRed": "Battle stats",
+      "days": "Smoke-free days",
+      "daysRed": "Days survived",
+      "money": "Money saved",
+      "moneyRed": "Money not wasted",
+      "cigs": "Cigarettes not smoked",
+      "cigsRed": "Cigarettes you couldn't avoid"
+    }
+  },
+  "goals": {
+    "title": "🎯 Goals",
+    "titleRed": "⚔️ My missions",
+    "redMean": {
+      "noActive": "You have no active goals. Start now.",
+      "activeNoFailures": "You are working on {{count}} goal(s). Today was perfect!",
+      "activeWithFailures": "{{active}} goals in progress. You failed {{failures}} time(s) today."
+    },
+    "motivation": {
+      "startJourney": "Ready to start your smoke-free journey? Set your first goal!",
+      "activeNoFailures": "{{count}} active goals. You were perfect today! 🎉",
+      "activeKeepGoing": "{{count}} active goals. Keep going!",
+      "completed": "You have achieved {{count}} goal(s)! Set a new one and keep going."
+    },
+    "alerts": {
+      "activatedTitleRed": "Goals activated",
+      "successTitle": "Success!",
+      "activatedBodyRed": "{{count}} goal(s) have been activated. Time to push yourself.",
+      "addedBody": "{{count}} goal(s) have been added!",
+      "failedTitleRed": "Failed to add goals",
+      "failedBodyRed": "Failed to activate goals. Please try again.",
+      "failedBody": "Failed to add goals. Please try again."
+    },
+    "status": {
+      "activeRed": "⚔️ In progress",
+      "active": "🔥 In progress"
+    },
+    "completedRed": "Goals completed",
+    "completed": "Completed",
+    "empty": {
+      "noActiveRed": "No active missions",
+      "noActive": "No active goals",
+      "noCompletedRed": "You haven't completed any missions yet.",
+      "noCompleted": "No goals have been completed yet.",
+      "selectMissionsRed": "Select missions and challenge yourself to quit smoking.",
+      "chooseGoals": "Choose from suggested goals to start your quit journey.",
+      "allMissionsTriedRed": "You have tried all missions. Check which ones you completed.",
+      "allGoalsTried": "Nice! You've tried all the goals.",
+      "completeToSeeRed": "Once you complete missions, you'll see them here.",
+      "completeToSee": "When you complete goals, they'll show up here!"
+    },
+    "buttons": {
+      "selectMissions": "Select missions",
+      "chooseGoals": "Choose goals",
+      "retreat": "Cancel",
+      "adding": "Adding...",
+      "activating": "Activating...",
+      "activateN": "Activate {{count}}",
+      "addN": "Add {{count}} goals",
+      "addMoreMissions": "Add missions",
+      "addAnotherGoal": "Add another goal"
+    },
+    "tabs": {
+      "activeRed": "In progress",
+      "active": "In progress",
+      "completedRed": "Completed",
+      "completed": "Completed"
+    },
+    "units": {
+      "percent": "%",
+      "days": "days",
+      "daysPerWeek": "days/week",
+      "limit": "Limit"
+    },
+    "select": {
+      "title": "🎯 Select goals",
+      "titleRed": "⚔️ Select missions",
+      "subtitle": "Choose goals that fit your smoke-free journey.",
+      "subtitleRed": "Choose your missions and challenge yourself to quit smoking."
+    },
+    "templates": {
+      "reduce_half": {
+        "title": "Cut in half",
+        "redMeanTitle": "Reduce smoking",
+        "description": "Cut your daily cigarettes by 50%",
+        "redMeanDescription": "Cut your smoking in half. No excuses."
+      },
+      "daily_limit_3": {
+        "title": "Limit to 3 a day",
+        "redMeanTitle": "Strict control",
+        "description": "Smoke at most 3 cigarettes per day",
+        "redMeanDescription": "3 cigarettes a day is the hard limit. Control yourself."
+      },
+      "daily_limit_1": {
+        "title": "1 cigarette a day",
+        "redMeanTitle": "Minimal smoking",
+        "description": "Smoke only 1 cigarette per day",
+        "redMeanDescription": "Only 1 cigarette a day is allowed. Nothing more."
+      },
+      "weekend_warrior": {
+        "title": "Smoke-free weekends",
+        "redMeanTitle": "Weekend bootcamp",
+        "description": "Do not smoke at all on weekends",
+        "redMeanDescription": "Stay completely smoke free on weekends. It takes real willpower."
+      },
+      "workday_clean": {
+        "title": "No smoking during work",
+        "redMeanTitle": "Work discipline",
+        "description": "Do not smoke during working hours",
+        "redMeanDescription": "Never smoke at work. Zero exceptions."
+      },
+      "week_streak": {
+        "title": "7-day streak",
+        "redMeanTitle": "7-day challenge",
+        "description": "Do not smoke for 7 days",
+        "redMeanDescription": "Stay smoke free for 7 days straight."
+      },
+      "month_champion": {
+        "title": "30-day champion",
+        "redMeanTitle": "30-day challenge",
+        "description": "Do not smoke for 30 days",
+        "redMeanDescription": "Stay smoke free for 30 days. Prove you can do it."
+      },
+      "morning_control": {
+        "title": "No smoking in the morning",
+        "redMeanTitle": "Morning discipline",
+        "description": "Do not smoke before 12:00 PM",
+        "redMeanDescription": "Absolutely no smoking in the morning. Show some discipline."
+      }
+    }
+  },
+  "settings": {
+    "title": "⚙️ Settings",
+    "subtitle": "Adjust how the app works for you.",
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "light": "Light mode",
+    "dark": "Dark mode",
+    "redMean": "Hard mode",
+    "notifications": "Notifications",
+    "enableLocal": "Enable local notifications",
+    "enableLocalDescOn": "You'll receive motivational messages.",
+    "enableLocalDescOff": "Turn this on to receive helpful reminders.",
+    "dailyReminderTime": "Daily reminder time",
+    "firstReminderAt": "The first reminder will be sent at this time.",
+    "enabled": "Enabled",
+    "enabledRed": "Enabled",
+    "languageCurrent": "Current language",
+    "profile": "Profile",
+    "nickname": "Nickname",
+    "nicknameDesc": "Set the name that will be shown on your account.",
+    "nicknamePromptTitle": "Edit nickname",
+    "account": "Account",
+    "deleteAccount": "Delete account",
+    "deleteAccountDesc": "All of your data will be permanently deleted.",
+    "deleteConfirmTitle": "Delete your account?",
+    "deleteConfirmBody": "Your account and all records will be deleted. This action cannot be undone.",
+    "deleteWarnTitle": "Are you really giving up?",
+    "deleteWarnBody": "You're getting close to your goals.",
+    "deleteWarnBodyActive": "You currently have {{count}} goal(s) in progress.",
+    "deleteConfirmYes": "Delete account",
+    "deleteConfirmNo": "I'll think again",
+    "deleting": "Deleting...",
+    "deleted": "Your account has been deleted.",
+    "reminders": {
+      "title": "Reminders",
+      "daily": "Daily reminders",
+      "dailyRed": "Daily check-in",
+      "dailyDesc": "Reminders that help you stay smoke free throughout the day.",
+      "dailyDescRed": "How many reminders do you want per day?",
+      "weekend": "Weekend reminders",
+      "weekendRed": "Weekend boost reminders",
+      "weekendDesc": "Reminders that help you stay smoke free on weekends and holidays.",
+      "weekendDescRed": "Take control of yourself on weekends.",
+      "weekendDialog": {
+        "title": "Weekend reminder settings",
+        "titleRed": "Weekend mode settings",
+        "message": "How can we support you on weekends?",
+        "messageRed": "Choose your weekend reminder level.",
+        "same": "Same as weekdays",
+        "sameRed": "Same as weekdays",
+        "fewer": "Fewer reminders",
+        "fewerRed": "Fewer reminders",
+        "none": "No reminders",
+        "noneRed": "No weekend reminders"
+      }
+    },
+    "language": "Language",
+    "languageDesc": "Choose your preferred language.",
+    "korean": "Korean",
+    "english": "English",
+    "cost": {
+      "title": "Cost tracking",
+      "packCost": "Price per pack",
+      "packCostDesc": "How much does one pack of cigarettes cost?",
+      "packCostPromptTitle": "Price per pack",
+      "packCostPromptBody": "Enter the price of one pack of cigarettes.",
+      "cigsPerPack": "Cigarettes per pack",
+      "cigsPerPackDesc": "How many cigarettes are in one pack?",
+      "cigsPerPackPromptTitle": "Cigarettes per pack",
+      "cigsPerPackPromptBody": "Select how many cigarettes are in one pack."
+    }
+  },
+  "notifications": {
+    "reminderTitle": "",
+    "encouragementTitle": "",
+    "goalTitlePrefix": "",
+    "messages": [
+      "Remember your goal. Every cigarette you don't smoke is a win. 🏆",
+      "You are stronger than your cravings. Keep going. 💪",
+      "Think about the money you're saving by not smoking. 💰",
+      "Your lungs are thanking you right now. Keep it up. 🫁",
+      "Cravings are temporary, but better health is permanent. ✨",
+      "You've come so far already. Don't give up now. 🌟",
+      "Every hour you stay smoke free protects your health. ⏰",
+      "Your future self will be grateful for the effort you're making today. 🙏",
+      "Quitting smoking isn't just giving something up. It's choosing a better life. ❤️",
+      "Cravings will pass, but your progress will last. 📈"
+    ],
+    "redMeanMessages": [
+      "Being weak is a choice. Choose to be strong.",
+      "Every cigarette you smoke is a loss.",
+      "Stop making excuses. Start making progress.",
+      "Your addiction doesn't own you. You own it.",
+      "Quitting is the choice of a winner. Smoking is the choice of a loser.",
+      "Be better than your worst craving.",
+      "Self-control beats desire. Always.",
+      "You are stronger than a single cigarette. Prove it.",
+      "Stop poisoning yourself. Start respecting yourself.",
+      "Winners don't make excuses. Winners make progress."
+    ]
+  }
+}

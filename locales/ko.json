@@ -1,0 +1,342 @@
+{
+  "tabs": {
+    "log": "기록",
+    "goals": "목표",
+    "history": "기록현황",
+    "settings": "설정",
+    "map": "흡연 구역 지도",
+    "dashboard": "대시보드",
+    "common": "공통"
+  },
+  "common": {
+    "error": "오류",
+    "cancel": "취소",
+    "save": "저장"
+  },
+  "auth": {
+    "signInTitle": "로그인",
+    "signInSubtitle": "이메일과 비밀번호를 입력해 계속 진행하세요.",
+    "email": "이메일",
+    "password": "비밀번호",
+    "signIn": "로그인",
+    "signingIn": "로그인 중...",
+    "createAccount": "계정 만들기",
+    "signupTitle": "계정 생성",
+    "signupSubtitle": "이메일과 비밀번호로 가입해 주세요. 인증 메일이 발송됩니다.",
+    "nicknamePlaceholder": "닉네임(선택 사항)",
+    "signUp": "회원가입",
+    "creatingAccount": "계정 생성 중...",
+    "verifyTitle": "이메일 인증",
+    "verifyBody": "인증 링크를 이메일로 보냈어요. 인증 후 로그인해 주세요."
+  },
+  "dashboard": {
+    "title": "대시보드",
+    "activeGoals": "활성 목표",
+    "noActive": "활성 목표가 없습니다.",
+    "quickActions": "바로가기",
+    "tiles": {
+      "log": "기록",
+      "goals": "목표",
+      "history": "기록현황",
+      "map": "흡연 구역 지도",
+      "settings": "설정"
+    },
+    "signOut": "로그아웃"
+  },
+  "log": {
+    "title": "일일 기록",
+    "noFailures": "오늘도 금연 유지 중이에요! 🎉",
+    "loggedToday": "오늘 {{count}}개 등록했어요",
+    "invalidCountTitle": "잘못된 입력",
+    "invalidCountBody": "올바른 숫자를 입력해 주세요",
+    "addError": "기록을 추가하지 못했어요",
+    "removeError": "기록을 삭제하지 못했어요",
+    "noEntries": "오늘 기록이 등록되지않았아요. 새로운 기록을 등록해보세요!.",
+    "cigarettesCount": "{{count}}개",
+    "addButton": "흡연 기록 추가",
+    "logEntry": "기록하기",
+    "howMany": "개비 수",
+    "redMean": {
+      "noFailures": "오늘 실패 없음. 그대로 유지하자.",
+      "todayWeakness": "오늘의 약점: {{count}}개",
+      "noEntries": "기록 없음. 정신력을 시험해보세요.",
+      "logFailure": "의지박약",
+      "confirmFailure": "실패 확정",
+      "howMany": "몇 개를 핀거니?"
+    }
+  },
+  "map": {
+    "title": "흡연구역 지도",
+    "useMyLocation": "내 위치 사용",
+    "addZone": "흡연구역 추가",
+    "zoneTitle": "제목",
+    "zoneDescription": "설명",
+    "save": "저장",
+    "cancel": "취소",
+    "loading": "지도를 불러오는 중...",
+    "noZones": "이 지역에는 등록된 구역이 없습니다",
+    "locationPermissionTitle": "위치 권한",
+    "locationPermissionBody": "주변 흡연구역을 표시하기 위해 위치 정보가 필요합니다.",
+    "added": "구역이 추가되었습니다",
+    "addFailed": "구역 추가에 실패했습니다",
+    "realtime": "실시간 업데이트 활성화",
+    "chooseLocation": "위치 선택",
+    "pickOnMap": "지도에서 선택",
+    "exitSelectMode": "선택 종료",
+    "confirmCenter": "이 위치 선택",
+    "viewZones": "구역 목록",
+    "zonesList": "등록된 구역",
+    "centerHere": "이 위치로 이동",
+    "edit": "수정",
+    "delete": "삭제",
+    "deleteTitle": "구역 삭제",
+    "deleteConfirm": "이 구역을 삭제하시겠습니까?"
+  },
+  "history": {
+    "title": "📊 기록",
+    "subtitle": "시간에 따른 변화를 확인하세요",
+    "progressOverview": "진행 상태",
+    "weekly": "📊 주간",
+    "monthly": "📈 월간",
+    "stats": {
+      "total": "총계",
+      "avgPerDay": "일 평균",
+      "trend": "변화",
+      "dayStreak": "연속 일수"
+    },
+    "titles": {
+      "week": "이번 주 진행현황",
+      "weekRed": "주간 실패",
+      "month": "월간 추세",
+      "monthRed": "월간 약점 추세"
+    },
+    "change": {
+      "increase": "증가",
+      "decrease": "감소",
+      "better": "개선",
+      "worse": "악화"
+    },
+    "calendar": {
+      "title": "캘린더 기록",
+      "titleRed": "전투 캘린더"
+    },
+    "units": {
+      "cigarettes": "{{count}}개비"
+    },
+    "legend": {
+      "smokeFree": "금연(0)",
+      "light": "가벼움(1-3)",
+      "heavy": "많음(4+)",
+      "strong": "강함",
+      "weak": "약함",
+      "failed": "실패"
+    },
+    "summary": {
+      "title": "요약 통계",
+      "titleRed": "전투 통계",
+      "days": "금연 일수",
+      "daysRed": "생존 일수",
+      "money": "절약한 금액",
+      "moneyRed": "낭비하지 않은 돈",
+      "cigs": "피우지 않은 개비 수",
+      "cigsRed": "피하지 않은 개비"
+    }
+  },
+  "goals": {
+    "title": "🎯 목표",
+    "titleRed": "⚔️ 너의 미션",
+    "redMean": {
+      "noActive": "진행 중인 미션이 없습니다.",
+      "activeNoFailures": "활성 미션 {{count}}개. 오늘 실패 없음.",
+      "activeWithFailures": "활성 미션 {{active}}개. 오늘 실패 {{failures}}회."
+    },
+    "motivation": {
+      "startJourney": "금연 여정을 시작해 볼까요? 첫 목표를 설정하세요!",
+      "activeNoFailures": "활성 목표 {{count}}개. 오늘도 금연 중이에요! 🎉",
+      "activeKeepGoing": "활성 목표 {{count}}개. 계속 이어가요!",
+      "completed": "완료된 목표 {{count}}개! 새로운 도전에 도전해 보세요."
+    },
+    "alerts": {
+      "activatedTitleRed": "미션 활성화",
+      "successTitle": "완료!",
+      "activatedBodyRed": "미션 {{count}}개 활성화. 실력으로 증명해라.",
+      "addedBody": "목표 {{count}}개가 추가되었어요!",
+      "failedTitleRed": "미션 실패",
+      "failedBodyRed": "미션 활성화 실패. 다시 시도하라.",
+      "failedBody": "목표를 추가하지 못했어요. 다시 시도해 주세요."
+    },
+    "status": {
+      "activeRed": "⚔️ 진행 중",
+      "active": "🔥 진행 중"
+    },
+    "completedRed": "미션 완료",
+    "completed": "완료",
+    "empty": {
+      "noActiveRed": "진행 중인 미션 없음",
+      "noActive": "진행 중인 목표 없음",
+      "noCompletedRed": "아직 승리 없음",
+      "noCompleted": "완료된 목표 없음",
+      "selectMissionsRed": "약함을 이겨라. 미션을 선택해 규율을 증명하라.",
+      "chooseGoals": "추천 목표 중에서 선택해 금연을 시작해 보세요",
+      "allMissionsTriedRed": "모든 미션을 시도함. 완료 목록을 확인하라.",
+      "allGoalsTried": "대단해요! 가능한 목표를 모두 시도했어요.",
+      "completeToSeeRed": "미션을 완료하면 이곳에서 승리를 확인할 수 있다.",
+      "completeToSee": "목표를 완료하면 이곳에서 볼 수 있어요!"
+    },
+    "buttons": {
+      "selectMissions": "미션 선택",
+      "chooseGoals": "목표 선택"
+    },
+    "templates": {
+      "reduce_half": {
+        "title": "절반으로 줄이기",
+        "redMeanTitle": "약점 줄이기",
+        "description": "하루 흡연량을 50% 줄이기",
+        "redMeanDescription": "비참한 중독을 통제할 수 있음을 증명해라"
+      },
+      "daily_limit_3": {
+        "title": "하루 제한: 3개",
+        "redMeanTitle": "엄격한 규율",
+        "description": "하루 최대 3개비",
+        "redMeanDescription": "최대 실패 3회. 변명 금지."
+      },
+      "daily_limit_1": {
+        "title": "하루 1개",
+        "redMeanTitle": "약점 1회만",
+        "description": "하루 1개비만 허용",
+        "redMeanDescription": "겨우 한 개비. 그게 전부다."
+      },
+      "weekend_warrior": {
+        "title": "주말 완전 금연",
+        "redMeanTitle": "주말의 강함",
+        "description": "주말엔 완전 금연 유지",
+        "redMeanDescription": "가장 중요한 순간에 강함을 보여라"
+      },
+      "workday_clean": {
+        "title": "근무 시간 금연",
+        "redMeanTitle": "프로의 힘",
+        "description": "근무 시간 동안 금연",
+        "redMeanDescription": "일할 땐 강해라. 약함은 금지."
+      },
+      "week_streak": {
+        "title": "7일 연속",
+        "redMeanTitle": "7일 전투",
+        "description": "7일 연속 금연 달성",
+        "redMeanDescription": "실패 없는 일주일. 가치를 증명하라."
+      },
+      "month_champion": {
+        "title": "30일 챔피언",
+        "redMeanTitle": "한 달의 힘",
+        "description": "30일 금연 완주",
+        "redMeanDescription": "순수한 규율과 힘의 30일"
+      },
+      "morning_control": {
+        "title": "아침 컨트롤",
+        "redMeanTitle": "아침 규율",
+        "description": "정오(12시) 전 흡연 금지",
+        "redMeanDescription": "아침의 약함을 통제하라"
+      }
+    }
+  },
+  "settings": {
+    "title": "⚙️ 설정",
+    "subtitle": "사용자 환경을 설정하세요",
+    "appearance": "모양",
+    "theme": "테마",
+    "light": "라이트 모드",
+    "dark": "다크 모드",
+    "redMean": "하드 모드",
+    "notifications": "알림",
+    "enableLocal": "로컬 알림 사용",
+    "enableLocalDescOn": "로컬 동기 부여 알림을 받습니다",
+    "enableLocalDescOff": "도움이 되는 로컬 알림을 받으려면 켜세요",
+    "dailyReminderTime": "일일 알림 시간",
+    "firstReminderAt": "첫 알림은 이 시간에 전송됩니다",
+    "enabled": "사용함",
+    "enabledRed": "사용 중",
+    "languageCurrent": "현재 언어",
+    "profile": "프로필",
+    "nickname": "닉네임",
+    "nicknameDesc": "계정에 표시할 이름을 설정하세요",
+    "nicknamePromptTitle": "닉네임 수정",
+    "account": "계정",
+    "deleteAccount": "계정 삭제",
+    "deleteAccountDesc": "모든 데이터가 삭제되며 복구할 수 없습니다.",
+    "deleteConfirmTitle": "계정을 삭제할까요?",
+    "deleteConfirmBody": "계정과 모든 기록이 삭제됩니다. 이 작업은 되돌릴 수 없습니다.",
+    "deleteWarnTitle": "정말 그만두실건가요?",
+    "deleteWarnBody": "목표가 얼마 안 남았어요.",
+    "deleteWarnBodyActive": "현재 진행 중인 목표가 {{count}}개 있어요.",
+    "deleteConfirmYes": "탈퇴할게요",
+    "deleteConfirmNo": "다시 한 번 생각할게요",
+    "deleting": "삭제 중...",
+    "deleted": "계정이 삭제되었습니다",
+    "reminders": {
+      "title": "리마인더",
+      "daily": "일일 리마인더",
+      "dailyRed": "일일 현실 점검",
+      "dailyDesc": "하루 동안 동기 부여를 위한 부드러운 알림",
+      "dailyDescRed": "하루에 몇 번 약속을 상기시켜 드릴까요?",
+      "weekend": "주말 리마인더",
+      "weekendRed": "주말 규율",
+      "weekendDesc": "주말과 휴일에도 동기 부여 유지",
+      "weekendDescRed": "가장 약해지는 순간에도 규율 유지",
+      "weekendDialog": {
+        "title": "주말 설정",
+        "titleRed": "주말 전투 모드",
+        "message": "주말에는 어떻게 도와드릴까요?",
+        "messageRed": "주말의 규율 수준을 선택하라",
+        "same": "평일과 동일",
+        "sameRed": "동일한 규율",
+        "fewer": "알림 줄이기",
+        "fewerRed": "알림 감소",
+        "none": "알림 없음",
+        "noneRed": "주말 알림 끄기"
+      }
+    },
+    "language": "언어",
+    "languageDesc": "선호하는 언어를 선택하세요",
+    "korean": "한국어",
+    "english": "영어",
+    "cost": {
+      "title": "비용 추적",
+      "packCost": "담배 한 갑 가격",
+      "packCostDesc": "담배 한 갑 가격은 얼마인가요?",
+      "packCostPromptTitle": "담배 한 갑 가격",
+      "packCostPromptBody": "담배 한 갑의 가격을 입력하세요",
+      "cigsPerPack": "한 갑 당 개비 수",
+      "cigsPerPackDesc": "한 갑에는 몇 개비가 들어있나요?",
+      "cigsPerPackPromptTitle": "한 갑 당 개비 수",
+      "cigsPerPackPromptBody": "한 갑의 개비 수를 선택하세요"
+    }
+  },
+  "notifications": {
+    "reminderTitle": "🚭 금연 여정 알림",
+    "encouragementTitle": "💪 포기하지 마세요!",
+    "goalTitlePrefix": "🎯 목표 업데이트: ",
+    "messages": [
+      "당신의 목표를 잊지 마세요 — 담배를 피우지 않은 지금 이 순간이 바로 승리입니다! 🏆",
+      "당신은 욕구보다 강합니다. 계속 나아가세요! 💪",
+      "담배를 피우지 않으면 돈이 통장에 쌓입니다! 당신의 통장이 고맙다고하네요! 💰",
+      "당신의 폐가 지금도 숨을 쉬며 고맙다고하네요! 🫁",
+      "욕구는 잠깐이지만, 건강은 평생 남습니다! ✨",
+      "지금까지 정말 잘 해오셨어요 - 이제와서 포기하기엔 너무 아쉽지않나요? 🌟",
+      "담배 없이 보낸 매 시간은 당신을 더 강하게 만듭니다! ⏰",
+      "오늘의 결단이 내일의 당신을 더욱 빛나게 할 거예요! 🙏",
+      "당신은 단지 담배를 끊는 것이 아니라 삶을 더 건강하게 만드는겁니다! ❤️",
+      "욕구는 사라지지만, 당신의 성장은 남습니다! 📈"
+    ],
+    "redMeanMessages": [
+      "약해지지 마세요. 강함은 당신의 선택입니다.",
+      "한 개비의 담배는 잠깐의 유혹이 아니라, 지금까지의 노력을 무너뜨립니다.",
+      "핑계는 끝입니다. 지금 바로 행동하세요.",
+      "중독이 아니라, 당신이 삶의 주인이 되어야 합니다.",
+      "금연은 이기는 사람의 선택입니다. 흡연은 패배로 가는 길입니다.",
+      "어떤 충동보다 더 강한 사람이 되어보세요.",
+      "규율은 언제나 욕망을 이깁니다.",
+      "당신의 의지가 더 강하다는 것을 증명하세요.",
+      "담배는 당신을 해칩니다. 이제는 자신을 진심으로 아껴주세요.",
+      "승자는 변명하지 않습니다. 대신 한 걸음 더 나아갑니다."
+    ]
+  }
+}
