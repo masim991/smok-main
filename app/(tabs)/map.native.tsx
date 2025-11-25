@@ -63,11 +63,15 @@ export default function SmokingZonesMap() {
 
         const subscription = await Location.watchPositionAsync(
           {
-            accuracy: Location.Accuracy.Balanced,
-            distanceInterval: 25,
-            timeInterval: 10000,
+            accuracy: Location.Accuracy.Highest,
+            distanceInterval: 10,
+            timeInterval: 5000,
           },
           (loc) => {
+            // Ignore noisy fixes to keep effective accuracy within ~5-10m
+            if (typeof loc.coords.accuracy === 'number' && loc.coords.accuracy > 10) {
+              return;
+            }
             const current = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
             setMyLocation(current);
             checkZoneEntry(current);
@@ -160,6 +164,7 @@ export default function SmokingZonesMap() {
   };
 
   const notifiedZoneIdsRef = useRef<Set<string>>(new Set());
+  const dwellMapRef = useRef<Map<string, { entryTime: number; notified3min: boolean }>>(new Map());
 
   const distanceMeters = (a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) => {
     const toRad = (x: number) => (x * Math.PI) / 180;
@@ -183,9 +188,23 @@ export default function SmokingZonesMap() {
           notifiedZoneIdsRef.current.add(z.id);
           notificationService.scheduleEncouragementNotification('', 0);
         }
+        const now = Date.now();
+        const rec = dwellMapRef.current.get(z.id);
+        if (!rec) {
+          dwellMapRef.current.set(z.id, { entryTime: now, notified3min: false });
+        } else {
+          const elapsed = now - rec.entryTime;
+          if (!rec.notified3min && elapsed >= 3 * 60 * 1000) {
+            notificationService.scheduleEncouragementNotification('흡연 중이신가요?', 0);
+            dwellMapRef.current.set(z.id, { ...rec, notified3min: true });
+          }
+        }
       } else {
         if (notifiedZoneIdsRef.current.has(z.id) && d > ENTER_RADIUS_M * 2) {
           notifiedZoneIdsRef.current.delete(z.id);
+        }
+        if (d > ENTER_RADIUS_M * 2) {
+          dwellMapRef.current.delete(z.id);
         }
       }
     }
@@ -401,7 +420,6 @@ export default function SmokingZonesMap() {
                     <View key={z.id} style={{ paddingVertical: 10, borderBottomWidth: 1, borderColor: colors.border }}>
                       <Text style={{ color: colors.text, fontWeight: '600' }}>{z.title}</Text>
                       {!!z.description && <Text style={{ color: colors.textSecondary }}>{z.description}</Text>}
-                      <Text style={{ color: colors.textSecondary }}>{z.latitude.toFixed(5)}, {z.longitude.toFixed(5)}</Text>
                       <View style={{ flexDirection: 'row', marginTop: 8 }}>
                         <TouchableOpacity
                           style={[styles.modalBtn, { borderColor: colors.border }]}
