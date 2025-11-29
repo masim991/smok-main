@@ -28,6 +28,33 @@ export class LocalNotificationService {
     return LocalNotificationService.instance;
   }
 
+  // Schedule daily notifications at specific times (HH:MM)
+  async scheduleSmartReminders(times: string[], message?: string): Promise<void> {
+    try {
+      if (!times || times.length === 0) return;
+      // Cancel existing to avoid duplicates
+      await this.cancelAllNotifications();
+      for (const t of times) {
+        const [hours, minutes] = t.split(':').map(Number);
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: i18n.t('notifications.reminderTitle') || 'Reminder',
+            body: message || (i18n.t('notifications.encouragementTitle') as string),
+            sound: 'default',
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+            hour: hours,
+            minute: minutes,
+            repeats: true,
+          },
+        });
+      }
+    } catch (error) {
+      console.error('Error scheduling smart reminders:', error);
+    }
+  }
+
   async requestPermissions(): Promise<boolean> {
     try {
       const { status: existingStatus } = await Notifications.getPermissionsAsync();

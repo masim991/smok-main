@@ -13,7 +13,13 @@
       "bundleIdentifier": "com.anonymous.boltexponativewind",
       "infoPlist": {
         "NSUserNotificationUsageDescription": "This app uses notifications to remind you of your goals and provide encouragement messages.",
-        "NSLocationWhenInUseUsageDescription": "We use your location to show nearby designated smoking areas on the map."
+        "NSLocationWhenInUseUsageDescription": "We use your location to show nearby designated smoking areas on the map.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location is used to monitor zones and dwell time to provide helpful notifications.",
+        "NSMicrophoneUsageDescription": "The microphone is used to detect characteristic lighter or inhalation sounds to help prevent smoking (optional).",
+        "UIBackgroundModes": [
+          "location"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "web": {
@@ -25,7 +31,8 @@
       "expo-router",
       "expo-font",
       "expo-web-browser",
-      "expo-notifications"
+      "expo-notifications",
+      "expo-location"
     ],
     "experiments": {
       "typedRoutes": true
@@ -34,12 +41,21 @@
       "package": "com.anonymous.boltexponativewind",
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "RECORD_AUDIO"
       ]
     },
     "extra": {
       "supabaseUrl": "https://zeugvzdoeinfiqsisvwb.supabase.co",
-      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpldWd2emRvZWluZmlxc2lzdndiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MTY4NzcsImV4cCI6MjA3ODQ5Mjg3N30.p-grUnmbD6oHMKN7nxNdYg5Hq-2rzO_afQaKivrSBVo"
+      "supabaseAnonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpldWd2emRvZWluZmlxc2lzdndiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5MTY4NzcsImV4cCI6MjA3ODQ5Mjg3N30.p-grUnmbD6oHMKN7nxNdYg5Hq-2rzO_afQaKivrSBVo",
+      "router": {},
+      "eas": {
+        "projectId": "8431d52d-d0ec-40b3-bf3c-be88ef651e46"
+      }
     }
   }
 }

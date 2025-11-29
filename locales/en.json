@@ -7,6 +7,9 @@
     "map": "Smoke-free zones",
     "dashboard": "Dashboard"
   },
+  "labels": {
+    "daysShort": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+  },
   "common": {
     "error": "Error",
     "cancel": "Cancel",
@@ -139,6 +142,26 @@
       "moneyRed": "Money not wasted",
       "cigs": "Cigarettes not smoked",
       "cigsRed": "Cigarettes you couldn't avoid"
+    },
+    "encouragement": {
+      "zero": "Great job staying smoke-free today! 🎉",
+      "low": "You're doing well. Keep it up! 💪",
+      "high": "Every step counts. You can do better tomorrow! 🌟"
+    },
+    "reports": {
+      "title": "Pattern analysis",
+      "weekday": "By weekday",
+      "hourly": "By hour",
+      "goalVsActual": {
+        "title": "Goal vs actual",
+        "today": "Today",
+        "target": "Target"
+      },
+      "trend": {
+        "title": "Trend (last 2 weeks vs previous 2 weeks)",
+        "increase": "+{{percent}}% compared to previous",
+        "decrease": "-{{percent}}% compared to previous"
+      }
     }
   },
   "goals": {
@@ -270,6 +293,11 @@
     "light": "Light mode",
     "dark": "Dark mode",
     "redMean": "Hard mode",
+    "themeDesc": {
+      "light": "Light mode: Keep going!",
+      "dark": "Dark mode: Stay strong.",
+      "redMean": "BRUTAL MODE: Stay focused!"
+    },
     "notifications": "Notifications",
     "enableLocal": "Enable local notifications",
     "enableLocalDescOn": "You'll receive motivational messages.",
@@ -322,6 +350,33 @@
     "languageDesc": "Choose your preferred language.",
     "korean": "Korean",
     "english": "English",
+    "smart": {
+      "title": "Smart notifications",
+      "enable": "Enable smart notifications",
+      "desc": "Automatically schedule reminders at your peak craving hours based on your recent pattern.",
+      "permissionTitle": "Permission required",
+      "permissionBody": "Please enable notifications in your device settings to use smart reminders.",
+      "enabledTitle": "Smart reminders enabled",
+      "enabledBody": "We'll remind you at: {{times}}",
+      "optimizeNow": "Optimize now (recalculate best times)",
+      "optimizedTitle": "Schedule updated",
+      "optimizedBody": "New reminder times: {{times}}"
+    },
+    "dailyGoal": {
+      "title": "Daily goal",
+      "label": "Set your daily limit",
+      "desc": "Set a realistic daily cigarette limit to stay on track.",
+      "promptTitle": "Daily goal",
+      "promptBody": "Enter your daily cigarette limit (0-20)",
+      "invalid": "Please enter a valid number between 0 and 20."
+    },
+    "background": {
+      "title": "Background location",
+      "enable": "Enable background tracking",
+      "desc": "Keep tracking zones and dwell time even when the app is in the background.",
+      "permissionTitle": "Background permission required",
+      "permissionBody": "Please allow background location in system settings to enable this feature."
+    },
     "cost": {
       "title": "Cost tracking",
       "packCost": "Price per pack",
@@ -362,5 +417,18 @@
       "Stop poisoning yourself. Start respecting yourself.",
       "Winners don't make excuses. Winners make progress."
     ]
+  },
+  "triggers": {
+    "emotion": "Emotion",
+    "emotionPh": "How did you feel? (e.g., stressed)",
+    "context": "Situation",
+    "contextPh": "What were you doing? (e.g., after meal)",
+    "place": "Place",
+    "placePh": "Where were you? (e.g., office entrance)",
+    "analysisTitle": "Trigger analysis",
+    "topEmotions": "Top emotions",
+    "topContexts": "Top situations",
+    "topPlaces": "Top places",
+    "none": "No trigger data yet. Try adding triggers when logging."
   }
 }

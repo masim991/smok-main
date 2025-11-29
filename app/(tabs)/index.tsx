@@ -5,14 +5,20 @@ import { Calendar as CalendarIcon, Plus, Minus, X } from 'lucide-react-native';
 import { Calendar as RNCalendar, DateObject } from 'react-native-calendars';
 import { useData } from '@/components/contexts/DataContext';
 import { useTranslation } from 'react-i18next';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LogTab() {
   const { colors, theme } = useTheme();
   const { entries, addEntry, removeEntry, getEntriesByDate } = useData();
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [smokeCount, setSmokeCount] = useState('1');
+  const [emotion, setEmotion] = useState('');
+  const [contextText, setContextText] = useState('');
+  const [place, setPlace] = useState('');
 
   const getMotivationalMessage = () => {
     const today = new Date().toISOString().split('T')[0];
@@ -107,8 +113,33 @@ export default function LogTab() {
     }
     
     try {
-      await addEntry(count);
+      const tagParts: string[] = [];
+      if (emotion.trim()) tagParts.push(`e=${emotion.trim()}`);
+      if (contextText.trim()) tagParts.push(`c=${contextText.trim()}`);
+      if (place.trim()) tagParts.push(`p=${place.trim()}`);
+      const noteTag = tagParts.length > 0 ? `[trg] ${tagParts.join(';')}` : undefined;
+
+      await addEntry(count, noteTag);
+
+      // Try to upsert trigger record to Supabase (safe fallback)
+      if ((emotion || contextText || place) && user) {
+        try {
+          await supabase.from('triggers').insert({
+            user_id: user.id,
+            date: new Date().toISOString(),
+            emotion: emotion || null,
+            context: contextText || null,
+            place: place || null,
+          });
+        } catch (e) {
+          // ignore if table doesn't exist or insert fails
+        }
+      }
+
       setSmokeCount('1');
+      setEmotion('');
+      setContextText('');
+      setPlace('');
       setShowAddModal(false);
     } catch (error) {
       Alert.alert(t('common.error'), t('log.addError'));
@@ -393,6 +424,38 @@ export default function LogTab() {
               </View>
             </View>
             
+            {/* Trigger inputs (optional) inside modal */}
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>{t('triggers.emotion')}</Text>
+              <TextInput
+                style={styles.input}
+                value={emotion}
+                onChangeText={setEmotion}
+                placeholder={t('triggers.emotionPh')}
+                placeholderTextColor={colors.textSecondary}
+              />
+            </View>
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>{t('triggers.context')}</Text>
+              <TextInput
+                style={styles.input}
+                value={contextText}
+                onChangeText={setContextText}
+                placeholder={t('triggers.contextPh')}
+                placeholderTextColor={colors.textSecondary}
+              />
+            </View>
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>{t('triggers.place')}</Text>
+              <TextInput
+                style={styles.input}
+                value={place}
+                onChangeText={setPlace}
+                placeholder={t('triggers.placePh')}
+                placeholderTextColor={colors.textSecondary}
+              />
+            </View>
+
             <TouchableOpacity 
               style={[
                 styles.button, 

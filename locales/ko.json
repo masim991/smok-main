@@ -7,6 +7,22 @@
     "map": "흡연구역",
     "dashboard": "대시보드"
   },
+  "triggers": {
+    "emotion": "감정",
+    "emotionPh": "어떤 감정이었나요? (예: 스트레스)",
+    "context": "상황",
+    "contextPh": "무엇을 하고 있었나요? (예: 식사 후)",
+    "place": "장소",
+    "placePh": "어디였나요? (예: 회사 출입구)",
+    "analysisTitle": "트리거 분석",
+    "topEmotions": "상위 감정",
+    "topContexts": "상위 상황",
+    "topPlaces": "상위 장소",
+    "none": "아직 트리거 데이터가 없습니다. 기록할 때 트리거를 함께 입력해 보세요."
+  },
+  "labels": {
+    "daysShort": ["일", "월", "화", "수", "목", "금", "토"]
+  },
   "common": {
     "error": "오류",
     "cancel": "취소",
@@ -139,6 +155,26 @@
       "moneyRed": "낭비하지 않은 금액",
       "cigs": "피우지 않은 담배",
       "cigsRed": "피할 수 없었던 담배"
+    },
+    "encouragement": {
+      "zero": "오늘 금연을 지켰어요! 정말 잘하셨어요! 🎉",
+      "low": "잘하고 있어요. 계속 이어가세요! 💪",
+      "high": "모든 걸음이 의미 있어요. 내일은 더 잘할 수 있어요! 🌟"
+    },
+    "reports": {
+      "title": "패턴 분석",
+      "weekday": "요일별",
+      "hourly": "시간대별",
+      "goalVsActual": {
+        "title": "목표 대비 실적",
+        "today": "오늘",
+        "target": "목표"
+      },
+      "trend": {
+        "title": "추세 (최근 2주 vs 직전 2주)",
+        "increase": "이전 대비 +{{percent}}%",
+        "decrease": "이전 대비 -{{percent}}%"
+      }
     }
   },
   "goals": {
@@ -270,12 +306,27 @@
     "light": "라이트 모드",
     "dark": "다크 모드",
     "redMean": "하드 모드",
+    "themeDesc": {
+      "light": "라이트 모드: 계속 힘내세요!",
+      "dark": "다크 모드: 흔들리지 마세요.",
+      "redMean": "하드 모드: 집중을 유지하세요!"
+    },
     "notifications": "알림",
     "enableLocal": "로컬 알림 활성화",
     "enableLocalDescOn": "동기부여 메시지를 받게 됩니다.",
     "enableLocalDescOff": "유용한 알림을 받으려면 활성화하세요.",
     "dailyReminderTime": "일일 알림 시간",
     "firstReminderAt": "이 시간에 첫 번째 알림이 발송됩니다.",
+    "local": {
+      "enabledTitle": "알림이 활성화되었습니다",
+      "enabledBody": "하루 {{count}}회, {{time}}부터 알림을 받습니다.",
+      "permissionTitle": "권한 필요",
+      "permissionBody": "디바이스 설정에서 알림 권한을 허용해주세요."
+    },
+    "reminderSet": {
+      "title": "알림 시간 설정",
+      "body": "선호하는 알림 시간을 선택하세요"
+    },
     "enabled": "활성화",
     "enabledRed": "활성화됨",
     "languageCurrent": "현재 언어",
@@ -322,6 +373,50 @@
     "languageDesc": "선호하는 언어를 선택하세요.",
     "korean": "한국어",
     "english": "English",
+    "smart": {
+      "title": "스마트 알림",
+      "enable": "스마트 알림 사용",
+      "desc": "최근 패턴을 분석해 취약 시간대에 자동으로 알림을 예약합니다.",
+      "permissionTitle": "권한 필요",
+      "permissionBody": "디바이스 설정에서 알림 권한을 활성화해야 스마트 알림을 사용할 수 있습니다.",
+      "enabledTitle": "스마트 알림 활성화",
+      "enabledBody": "다음 시간에 안내해 드릴게요: {{times}}",
+      "optimizeNow": "최적화 실행 (최적 시간 재계산)",
+      "optimizedTitle": "스케줄이 업데이트되었습니다",
+      "optimizedBody": "새 알림 시간: {{times}}"
+    },
+    "dailyGoal": {
+      "title": "일일 목표",
+      "label": "일일 제한 설정",
+      "desc": "현실적인 일일 개비 제한을 설정해 목표를 유지하세요.",
+      "promptTitle": "일일 목표",
+      "promptBody": "일일 담배 제한(0-20)을 입력하세요",
+      "invalid": "0에서 20 사이의 올바른 숫자를 입력하세요."
+    },
+    "background": {
+      "title": "백그라운드 위치",
+      "enable": "백그라운드 추적 사용",
+      "desc": "앱이 백그라운드여도 구역 및 체류 시간을 계속 추적합니다.",
+      "permissionTitle": "백그라운드 권한 필요",
+      "permissionBody": "이 기능을 사용하려면 시스템 설정에서 백그라운드 위치 권한을 허용하세요."
+    },
+    "geofence": {
+      "title": "지오펜스 자동 카운트",
+      "enable": "흡연구역 체류 시 자동 기록",
+      "desc": "저장된 흡연구역 내에서 일정 시간(약 3분) 이상 머물면 경고 알림과 함께 1개비가 자동으로 기록됩니다."
+    },
+    "wearable": {
+      "title": "웨어러블 감지",
+      "enable": "웨어러블(SpO2 + 모션)로 감지",
+      "desc": "흡연 전/중 산소포화도와 손-입 모션 패턴을 비교해 흡연 이벤트를 추정합니다.",
+      "unavailable": "웨어러블 센서를 사용할 수 없습니다. (expo-sensors가 설치되지 않았거나 미지원 장치)"
+    },
+    "audio": {
+      "title": "오디오 감지",
+      "enable": "라이터/흡입 소리로 감지",
+      "desc": "웨어러블이 없을 때 라이터 클릭/흡입과 같은 특징적인 소리 패턴을 감지해 경고 및 자동 기록합니다.",
+      "unavailable": "오디오 감지를 사용할 수 없습니다. (expo-av가 설치되지 않았거나 권한 거부)"
+    },
     "cost": {
       "title": "비용 추적",
       "packCost": "한 갑 가격",

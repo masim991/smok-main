@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch, Platform } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
-import { Bell, BellOff, Palette, Plus, Minus, Moon, Sun, Skull } from 'lucide-react-native';
+import { Bell, BellOff, Palette, Plus, Minus, Moon, Sun, Skull, Target as TargetIcon, Map as MapIcon } from 'lucide-react-native';
 import { notificationService } from '@/components/services/notifications/LocalNotifications';
+import { startBackgroundLocation, stopBackgroundLocation, isBackgroundLocationStarted } from '@/components/services/location/BackgroundLocation';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/components/contexts/DataContext';
+import { startWearableDetection, stopWearableDetection } from '@/components/services/detection/WearableDetection';
+import { startAudioDetection, stopAudioDetection } from '@/components/services/detection/AudioDetection';
 
 type SettingsSectionProps = {
   title: string;
@@ -57,6 +60,51 @@ const SettingsSection = ({ title, icon, children, style }: SettingsSectionProps)
   );
 };
 
+function BackgroundToggle() {
+  const { colors } = useTheme();
+  const { t } = useTranslation();
+  const [enabled, setEnabled] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const started = await isBackgroundLocationStarted();
+      if (mounted) setEnabled(started);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const onToggle = async (value: boolean) => {
+    try {
+      if (value) {
+        const ok = await startBackgroundLocation();
+        if (!ok) {
+          Alert.alert(t('settings.background.permissionTitle'), t('settings.background.permissionBody'));
+          setEnabled(false);
+          return;
+        }
+        setEnabled(true);
+      } else {
+        await stopBackgroundLocation();
+        setEnabled(false);
+      }
+    } catch (e) {
+      console.error('[BG Toggle] error:', e);
+    }
+  };
+
+  return (
+    <Switch
+      value={enabled}
+      onValueChange={onToggle}
+      trackColor={{ false: colors.border, true: colors.primary }}
+      thumbColor="#FFFFFF"
+    />
+  );
+}
+
 // 설정 탭 메인 컴포넌트: 테마/언어/알림/계정 등 사용자 환경 설정 제공
 export default function SettingsTab() {
   const { colors, theme, setTheme, isRedMeanUnlocked, unlockRedMean } = useTheme();
@@ -68,12 +116,22 @@ export default function SettingsTab() {
     notificationTime,
     setNotificationTime: setNotificationTimeContext,
     language,
-    setLanguage
+    setLanguage,
+    smartNotificationsEnabled,
+    setSmartNotificationsEnabled,
+    dailyGoalTarget,
+    setDailyGoalTarget,
+    geofenceAutoCount,
+    setGeofenceAutoCount,
+    wearableDetectionEnabled,
+    setWearableDetectionEnabled,
+    audioDetectionEnabled,
+    setAudioDetectionEnabled,
   } = useSettings();
   const [themeToggleCount, setThemeToggleCount] = useState(0);
   const { t } = useTranslation();
   const { user, updateNickname, deleteAccount } = useAuth();
-  const { getActiveGoals } = useData();
+  const { getActiveGoals, entries, addEntry } = useData();
 
   // 알림 설정 초기화 및 권한 확인
   useEffect(() => {
@@ -93,6 +151,52 @@ export default function SettingsTab() {
     loadNotificationSettings();
   }, [notificationsEnabled, setNotificationsEnabledContext]);
 
+  // 스마트 알림: 최근 데이터에서 상위 피크 시간대(최대 3개)를 계산해 예약
+  const computePeakHours = () => {
+    const counts = Array(24).fill(0);
+    try {
+      const since = new Date();
+      since.setDate(since.getDate() - 30);
+      entries.forEach(e => {
+        const d = new Date(e.date);
+        if (d >= since) {
+          counts[d.getHours()] += e.count;
+        }
+      });
+    } catch {}
+    const ranked = counts
+      .map((v, i) => ({ h: i, v }))
+      .sort((a, b) => b.v - a.v)
+      .filter(x => x.v > 0)
+      .slice(0, 3);
+    if (ranked.length === 0) {
+      // fallback: 아침/점심/저녁
+      return ['09:00', '12:00', '18:00'];
+    }
+    return ranked.map(x => `${String(x.h).padStart(2, '0')}:00`);
+  };
+
+  const toggleSmartNotifications = async (value: boolean) => {
+    try {
+      await setSmartNotificationsEnabled(value);
+      if (value) {
+        const hasPermission = await notificationService.requestPermissions();
+        if (!hasPermission) {
+          await setSmartNotificationsEnabled(false);
+          Alert.alert(t('settings.smart.permissionTitle'), t('settings.smart.permissionBody'));
+          return;
+        }
+        const times = computePeakHours();
+        await notificationService.scheduleSmartReminders(times);
+        Alert.alert(t('settings.smart.enabledTitle'), t('settings.smart.enabledBody', { times: times.join(', ') }));
+      } else {
+        await notificationService.cancelAllNotifications();
+      }
+    } catch (e) {
+      console.error('Smart notifications toggle error:', e);
+    }
+  };
+
   // 알림 온/오프 스위치 핸들러
   const toggleNotifications = async (value: boolean) => {
     try {
@@ -109,15 +213,15 @@ export default function SettingsTab() {
           });
 
           Alert.alert(
-            'Notifications Enabled',
-            `You'll receive ${remindersPerDay} reminder${remindersPerDay > 1 ? 's' : ''} per day starting at ${notificationTime}.`,
-            [{ text: 'OK' }]
+            t('settings.local.enabledTitle'),
+            t('settings.local.enabledBody', { count: remindersPerDay, time: notificationTime }),
+            [{ text: t('common.save') }]
           );
         } else {
           Alert.alert(
-            'Permission Required',
-            'Please enable notifications in your device settings to receive reminders.',
-            [{ text: 'OK' }]
+            t('settings.local.permissionTitle'),
+            t('settings.local.permissionBody'),
+            [{ text: t('common.save') }]
           );
         }
       } else {
@@ -194,15 +298,15 @@ export default function SettingsTab() {
     }
   };
 
-  // 테마별 동기부여 문구 반환
+  // 테마별 동기부여 문구 반환 (i18n)
   const getMotivationalMessage = () => {
     switch (theme) {
       case 'redMean':
-        return 'BRUTAL MODE: Stay focused!';
+        return t('settings.themeDesc.redMean');
       case 'dark':
-        return 'Dark Mode: Stay strong.';
+        return t('settings.themeDesc.dark');
       default:
-        return 'Light Mode: Keep going!';
+        return t('settings.themeDesc.light');
     }
   };
 
@@ -326,6 +430,220 @@ export default function SettingsTab() {
               >
                 <Text style={styles.themeButtonText}>{user?.nickname || '-'}</Text>
               </TouchableOpacity>
+            </View>
+          </View>
+        </SettingsSection>
+
+        {/* Geofence Auto Count */}
+        <SettingsSection
+          title={t('settings.geofence.title') || 'Geofence Auto Count'}
+          icon={<MapIcon size={20} color={colors.primary} />}
+        >
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingLabel}>{t('settings.geofence.enable') || 'Auto-count when dwelling in smoking zone'}</Text>
+                <Text style={styles.settingDescription}>
+                  {t('settings.geofence.desc') || 'If you stay inside a saved zone for a few minutes, you will be warned and one cigarette will be auto-counted.'}
+                </Text>
+              </View>
+              <Switch
+                value={geofenceAutoCount}
+                onValueChange={setGeofenceAutoCount}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          </View>
+        </SettingsSection>
+
+        {/* Wearable Detection */}
+        <SettingsSection
+          title={t('settings.wearable.title') || 'Wearable Detection'}
+          icon={<TargetIcon size={20} color={colors.primary} />}
+        >
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingLabel}>{t('settings.wearable.enable') || 'Detect via wearable (SpO2 + motion)'}</Text>
+                <Text style={styles.settingDescription}>
+                  {t('settings.wearable.desc') || 'Compare oxygen saturation before/during and motion patterns to infer smoking events.'}
+                </Text>
+              </View>
+              <Switch
+                value={wearableDetectionEnabled}
+                onValueChange={async (v) => {
+                  await setWearableDetectionEnabled(v);
+                  if (v) {
+                    const ok = await startWearableDetection(async () => {
+                      try {
+                        await addEntry(1, '[#wearable] motion+SpO2');
+                        await notificationService.scheduleEncouragementNotification('', 0);
+                      } catch {}
+                    });
+                    if (!ok) {
+                      Alert.alert(t('common.error'), t('settings.wearable.unavailable') || 'Wearable sensors not available.');
+                      await setWearableDetectionEnabled(false);
+                    }
+                  } else {
+                    await stopWearableDetection();
+                  }
+                }}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          </View>
+        </SettingsSection>
+
+        {/* Audio Detection */}
+        <SettingsSection
+          title={t('settings.audio.title') || 'Audio Detection'}
+          icon={<Bell size={20} color={colors.primary} />}
+        >
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingLabel}>{t('settings.audio.enable') || 'Detect lighter/smoking sounds'}</Text>
+                <Text style={styles.settingDescription}>
+                  {t('settings.audio.desc') || 'When no wearable is connected, listen for characteristic lighter or inhalation sounds to trigger a warning and auto-count.'}
+                </Text>
+              </View>
+              <Switch
+                value={audioDetectionEnabled}
+                onValueChange={async (v) => {
+                  await setAudioDetectionEnabled(v);
+                  if (v) {
+                    const ok = await startAudioDetection(async () => {
+                      try {
+                        await addEntry(1, '[#audio] lighter/smoke sound');
+                        await notificationService.scheduleEncouragementNotification('', 0);
+                      } catch {}
+                    });
+                    if (!ok) {
+                      Alert.alert(t('common.error'), t('settings.audio.unavailable') || 'Audio detection not available.');
+                      await setAudioDetectionEnabled(false);
+                    }
+                  } else {
+                    await stopAudioDetection();
+                  }
+                }}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          </View>
+        </SettingsSection>
+
+        {/* Smart Notifications */}
+        <SettingsSection
+          title={t('settings.smart.title')}
+          icon={<Bell size={20} color={colors.primary} />}
+        >
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingLabel}>{t('settings.smart.enable')}</Text>
+                <Text style={styles.settingDescription}>
+                  {t('settings.smart.desc')}
+                </Text>
+              </View>
+              <Switch
+                value={smartNotificationsEnabled}
+                onValueChange={toggleSmartNotifications}
+                trackColor={{ false: colors.border, true: colors.primary }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.notificationTypeButton, { borderColor: colors.border, backgroundColor: colors.background, marginTop: 12 }]}
+              onPress={async () => {
+                const times = computePeakHours();
+                await notificationService.scheduleSmartReminders(times);
+                Alert.alert(t('settings.smart.optimizedTitle'), t('settings.smart.optimizedBody', { times: times.join(', ') }));
+              }}
+            >
+              <Text style={[styles.notificationTypeText, { color: colors.text }]}>
+                {t('settings.smart.optimizeNow')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </SettingsSection>
+
+        {/* Daily Goal */}
+        <SettingsSection
+          title={t('settings.dailyGoal.title')}
+          icon={<TargetIcon size={20} color={colors.primary} />}
+        >
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingLabel}>{t('settings.dailyGoal.label')}</Text>
+                <Text style={styles.settingDescription}>
+                  {t('settings.dailyGoal.desc')}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.themeButton, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  if (Platform.OS === 'ios') {
+                    Alert.prompt(
+                      t('settings.dailyGoal.promptTitle'),
+                      t('settings.dailyGoal.promptBody'),
+                      [
+                        { text: t('common.cancel'), style: 'cancel' },
+                        {
+                          text: t('common.save'),
+                          onPress: async (value?: string) => {
+                            const n = value ? parseInt(value, 10) : NaN;
+                            if (!Number.isNaN(n) && n >= 0 && n <= 20) {
+                              await setDailyGoalTarget(n);
+                            } else {
+                              Alert.alert(t('common.error'), t('settings.dailyGoal.invalid'));
+                            }
+                          }
+                        }
+                      ],
+                      'plain-text',
+                      String(dailyGoalTarget || 0)
+                    );
+                  } else {
+                    Alert.alert(
+                      t('settings.dailyGoal.promptTitle'),
+                      t('settings.dailyGoal.promptBody'),
+                      [
+                        { text: '0', onPress: async () => setDailyGoalTarget(0) },
+                        { text: '5', onPress: async () => setDailyGoalTarget(5) },
+                        { text: '10', onPress: async () => setDailyGoalTarget(10) },
+                        { text: '15', onPress: async () => setDailyGoalTarget(15) },
+                        { text: '20', onPress: async () => setDailyGoalTarget(20) },
+                        { text: t('common.cancel'), style: 'cancel' },
+                      ]
+                    );
+                  }
+                }}
+              >
+                <Text style={styles.themeButtonText}>{dailyGoalTarget || 0}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </SettingsSection>
+
+        {/* Background Location Tracking */}
+        <SettingsSection
+          title={t('settings.background.title')}
+          icon={<MapIcon size={20} color={colors.primary} />}
+        >
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingLabel}>{t('settings.background.enable')}</Text>
+                <Text style={styles.settingDescription}>
+                  {t('settings.background.desc')}
+                </Text>
+              </View>
+              <BackgroundToggle />
             </View>
           </View>
         </SettingsSection>
@@ -477,12 +795,12 @@ export default function SettingsTab() {
                     style={[styles.timePickerButton, { borderColor: colors.border }]}
                     onPress={async () => {
                       Alert.alert(
-                        'Set Reminder Time',
-                        'Choose your preferred reminder time',
+                        t('settings.reminderSet.title'),
+                        t('settings.reminderSet.body'),
                         [
-                          { text: 'Cancel', style: 'cancel' },
+                          { text: t('common.cancel'), style: 'cancel' },
                           {
-                            text: '7:00 AM',
+                            text: '07:00',
                             onPress: async () => {
                               await setNotificationTimeContext('07:00');
                               if (notificationsEnabled) {
@@ -495,7 +813,7 @@ export default function SettingsTab() {
                             }
                           },
                           {
-                            text: '9:00 AM',
+                            text: '09:00',
                             onPress: async () => {
                               await setNotificationTimeContext('09:00');
                               if (notificationsEnabled) {
@@ -508,7 +826,7 @@ export default function SettingsTab() {
                             }
                           },
                           {
-                            text: '12:00 PM',
+                            text: '12:00',
                             onPress: async () => {
                               await setNotificationTimeContext('12:00');
                               if (notificationsEnabled) {
@@ -521,7 +839,7 @@ export default function SettingsTab() {
                             }
                           },
                           {
-                            text: '6:00 PM',
+                            text: '18:00',
                             onPress: async () => {
                               await setNotificationTimeContext('18:00');
                               if (notificationsEnabled) {
@@ -534,7 +852,7 @@ export default function SettingsTab() {
                             }
                           },
                           {
-                            text: '9:00 PM',
+                            text: '21:00',
                             onPress: async () => {
                               await setNotificationTimeContext('21:00');
                               if (notificationsEnabled) {
@@ -558,87 +876,75 @@ export default function SettingsTab() {
                 </View>
 
                 <View style={{ marginTop: 16 }}>
-                  <Text style={[styles.settingLabel, { marginBottom: 8 }]}>Notification Types</Text>
+                  <Text style={[styles.settingLabel, { marginBottom: 8 }]}>{t('settings.notificationTypesTitle')}</Text>
 
                   <TouchableOpacity
                     style={[styles.notificationTypeButton, { borderColor: colors.border, backgroundColor: colors.background }]}
                     onPress={() => {
                       Alert.alert(
-                        theme === 'redMean' ? 'MOTIVATION TYPE' : 'Motivation Style',
-                        theme === 'redMean' ? 'CHOOSE YOUR BATTLE STYLE' : 'Choose your preferred motivation style',
+                        t('settings.motivation.title'),
+                        t('settings.motivation.body'),
                         [
-                          { text: 'Cancel', style: 'cancel' },
+                          { text: t('common.cancel'), style: 'cancel' },
                           {
-                            text: theme === 'redMean' ? 'GENTLE ENCOURAGEMENT' : 'Gentle & Supportive',
+                            text: t('settings.motivation.gentle'),
                             onPress: () => console.log('Gentle motivation selected')
                           },
                           {
-                            text: theme === 'redMean' ? 'FIRM DISCIPLINE' : 'Firm & Direct',
+                            text: t('settings.motivation.firm'),
                             onPress: () => console.log('Firm motivation selected')
                           },
                           {
-                            text: theme === 'redMean' ? 'BRUTAL HONESTY' : 'Tough Love',
+                            text: t('settings.motivation.tough'),
                             onPress: () => console.log('Tough motivation selected')
                           }
                         ]
                       );
                     }}
                   >
-                    <Text style={[styles.notificationTypeText, { color: colors.text }]}>
-                      {theme === 'redMean' ? 'MOTIVATION STYLE: BRUTAL' : 'Motivation Style: Supportive'}
-                    </Text>
+                    <Text style={[styles.notificationTypeText, { color: colors.text }]}>{t('settings.motivation.selected')}</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     style={[styles.notificationTypeButton, { borderColor: colors.border, backgroundColor: colors.background, marginTop: 8 }]}
                     onPress={() => {
                       Alert.alert(
-                        theme === 'redMean' ? 'CRAVING ALERTS' : 'Craving Support',
-                        theme === 'redMean' ? 'ENABLE ANTI-WEAKNESS ALERTS?' : 'Get help when cravings hit?',
+                        t('settings.craving.title'),
+                        t('settings.craving.body'),
                         [
-                          { text: 'Cancel', style: 'cancel' },
+                          { text: t('common.cancel'), style: 'cancel' },
                           {
-                            text: theme === 'redMean' ? 'ENABLE BATTLE MODE' : 'Enable Support',
+                            text: t('settings.craving.enable'),
                             onPress: () => {
-                              Alert.alert(
-                                theme === 'redMean' ? 'BATTLE MODE ACTIVATED' : 'Craving Support Enabled',
-                                theme === 'redMean' ? 'YOU WILL RECEIVE IMMEDIATE DISCIPLINE WHEN WEAKNESS STRIKES' : 'You\'ll get instant support notifications during tough moments'
-                              );
+                              Alert.alert(t('settings.craving.enabledTitle'), t('settings.craving.enabledBody'));
                             }
                           }
                         ]
                       );
                     }}
                   >
-                    <Text style={[styles.notificationTypeText, { color: colors.text }]}>
-                      {theme === 'redMean' ? 'CRAVING BATTLE ALERTS' : 'Craving Support Notifications'}
-                    </Text>
+                    <Text style={[styles.notificationTypeText, { color: colors.text }]}>{t('settings.craving.selected')}</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     style={[styles.notificationTypeButton, { borderColor: colors.border, backgroundColor: colors.background, marginTop: 8 }]}
                     onPress={() => {
                       Alert.alert(
-                        theme === 'redMean' ? 'ACHIEVEMENT REPORTS' : 'Progress Updates',
-                        theme === 'redMean' ? 'RECEIVE VICTORY NOTIFICATIONS?' : 'Get notified about your progress?',
+                        t('settings.progress.title'),
+                        t('settings.progress.body'),
                         [
-                          { text: 'Cancel', style: 'cancel' },
+                          { text: t('common.cancel'), style: 'cancel' },
                           {
-                            text: theme === 'redMean' ? 'ENABLE VICTORY REPORTS' : 'Enable Updates',
+                            text: t('settings.progress.enable'),
                             onPress: () => {
-                              Alert.alert(
-                                theme === 'redMean' ? 'VICTORY REPORTS ENABLED' : 'Progress Updates Enabled',
-                                theme === 'redMean' ? 'YOU WILL BE NOTIFIED OF YOUR CONQUESTS AND FAILURES' : 'You\'ll receive weekly progress summaries and milestone celebrations'
-                              );
+                              Alert.alert(t('settings.progress.enabledTitle'), t('settings.progress.enabledBody'));
                             }
                           }
                         ]
                       );
                     }}
                   >
-                    <Text style={[styles.notificationTypeText, { color: colors.text }]}>
-                      {theme === 'redMean' ? 'VICTORY/DEFEAT REPORTS' : 'Weekly Progress Updates'}
-                    </Text>
+                    <Text style={[styles.notificationTypeText, { color: colors.text }]}>{t('settings.progress.selected')}</Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -785,10 +1091,7 @@ export default function SettingsTab() {
 
         {theme === 'redMean' && (
           <View style={styles.redMeanWarning}>
-            <Text style={styles.warningText}>
-              ⚠️ RED MEAN MODE ACTIVE ⚠️{'\n'}
-              This mode uses harsh language and brutal honesty to motivate you.
-            </Text>
+            <Text style={styles.warningText}>{t('settings.redMeanWarning')}</Text>
           </View>
         )}
       </ScrollView>

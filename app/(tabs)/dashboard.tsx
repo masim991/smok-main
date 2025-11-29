@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useData } from '@/components/contexts/DataContext';
+import { useSettings } from '@/contexts/SettingsContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { Link, router } from 'expo-router';
 import { Target, Calendar, Map, Settings } from 'lucide-react-native';
@@ -12,7 +13,12 @@ export default function Dashboard() {
   const { getActiveGoals } = useData();
   const { signOut, user } = useAuth();
   const { t } = useTranslation();
+  const { entries } = useData();
+  const { dailyGoalTarget } = useSettings();
   const activeGoals = getActiveGoals();
+  const todayKey = new Date().toISOString().split('T')[0];
+  const todayTotal = entries.filter(e => e.date.startsWith(todayKey)).reduce((s, e) => s + e.count, 0);
+  const progress = dailyGoalTarget > 0 ? Math.min(100, Math.round((todayTotal / dailyGoalTarget) * 100)) : 0;
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
@@ -41,6 +47,24 @@ export default function Dashboard() {
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
         <View style={styles.content}>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>{t('settings.dailyGoal.title')}</Text>
+            <Text style={{ color: colors.textSecondary, marginBottom: 8 }}>
+              {t('settings.dailyGoal.label')}
+            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Text style={{ color: colors.text, fontWeight: '700' }}>{todayTotal}</Text>
+              <Text style={{ color: colors.textSecondary }}>/ {dailyGoalTarget || 0}</Text>
+              <Text style={{ color: theme === 'redMean' ? colors.error : colors.primary }}>{progress}%</Text>
+            </View>
+            <View style={{ marginTop: 8 }}>
+              <Link href="/(tabs)/settings" asChild>
+                <TouchableOpacity style={{ paddingVertical: 8 }}>
+                  <Text style={{ color: colors.primary, fontWeight: '700' }}>{t('settings.dailyGoal.title')}</Text>
+                </TouchableOpacity>
+              </Link>
+            </View>
+          </View>
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>{t('dashboard.activeGoals')}</Text>
             {activeGoals.length === 0 ? (

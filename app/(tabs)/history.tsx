@@ -41,18 +41,22 @@ interface BarChartProps {
   height: number
   color: string
   isMonthly?: boolean
+  daysShort?: string[]
+  labels?: string[]
 }
 
-const BarChart = ({ data, width, height, color, isMonthly = false }: BarChartProps) => {
+const BarChart = ({ data, width, height, color, isMonthly = false, daysShort, labels }: BarChartProps) => {
   if (!data || data.length === 0) return null
 
   const maxValue = Math.max(...data.map((d) => d.cigarettes), 1)
   const barWidth = (width - 40) / data.length - 10
 
   const getXAxisLabel = (item: BarData, index: number) => {
+    if (labels && labels[index] !== undefined) return labels[index]
     if (isMonthly && item.week !== undefined) return `W${item.week}`
     if (item.day) return item.day.substring(0, 1)
-    return ["S", "M", "T", "W", "T", "F", "S"][index]
+    const localDays = daysShort ?? ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    return (localDays[index] || '').substring(0, 1)
   }
 
   return (
@@ -87,7 +91,8 @@ const BarChart = ({ data, width, height, color, isMonthly = false }: BarChartPro
 export default function HistoryTab() {
   const { colors, theme } = useTheme()
   const { t } = useTranslation()
-  const { entries } = useData()
+  const { entries, getActiveGoals } = useData()
+  const daysShort = t('labels.daysShort', { returnObjects: true }) as string[]
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'week' | 'month'>('week')
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(true)
@@ -210,7 +215,7 @@ export default function HistoryTab() {
 
       return {
         date: dateKey,
-        day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][i],
+        day: (daysShort && daysShort[i]) || undefined,
         cigarettes: dayTotal
       };
     });
@@ -222,12 +227,12 @@ export default function HistoryTab() {
     };
   }, [entries, theme, colors]);
 
-  // Get encouragement message based on selected date
+  // Get encouragement message based on selected date (i18n)
   const getEncouragement = (iso: string) => {
     const entryCount = entries.filter((e: SmokeEntry) => e.date.startsWith(iso)).reduce((sum: number, e: SmokeEntry) => sum + e.count, 0)
-    if (entryCount === 0) return "Great job staying smoke-free today! 🎉"
-    if (entryCount <= 3) return "You're doing well. Keep it up! 💪"
-    return "Every step counts. You can do better tomorrow! 🌟"
+    if (entryCount === 0) return t('history.encouragement.zero')
+    if (entryCount <= 3) return t('history.encouragement.low')
+    return t('history.encouragement.high')
   }
 
   // Calculate selected date total
@@ -579,6 +584,34 @@ export default function HistoryTab() {
       padding: 16,
       alignItems: 'center',
     },
+    analysisRow: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    card: {
+      flex: 1,
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    cardTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.text,
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    cardValue: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: theme === 'redMean' ? colors.error : colors.primary,
+      textAlign: 'center',
+    },
+    listItem: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+    listText: { color: colors.text, fontSize: 14 },
+    listCount: { color: colors.textSecondary, fontSize: 14, marginLeft: 8 },
   })
 
 
@@ -720,6 +753,7 @@ export default function HistoryTab() {
                     height={200}
                     color={theme === 'redMean' ? colors.error : colors.primary}
                     isMonthly={activeTab === 'month'}
+                    daysShort={daysShort}
                   />
                 </View>
               </View>
@@ -884,6 +918,198 @@ export default function HistoryTab() {
                 </Text>
               </View>
             </View>
+          </View>
+        </View>
+
+        {/* Pattern Analysis */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Activity size={20} color={colors.primary} />
+              <Text style={styles.sectionTitle}>{t('history.reports.title')}</Text>
+            </View>
+          </View>
+          <View style={styles.sectionContent}>
+            {/* Weekday chart */}
+            <Text style={[styles.chartTitle, { color: colors.text }]}>{t('history.reports.weekday')}</Text>
+            <View style={styles.chartWrapper}>
+              {(() => {
+                const weekdayBuckets = Array(7).fill(0)
+                entries.forEach((e: SmokeEntry) => {
+                  try {
+                    const d = new Date(e.date)
+                    const day = d.getDay()
+                    weekdayBuckets[day] += e.count
+                  } catch {}
+                })
+                const data = weekdayBuckets.map((v, i) => ({ cigarettes: v, day: daysShort?.[i] || '' }))
+                return (
+                  <BarChart
+                    data={data}
+                    width={Dimensions.get('window').width - 64}
+                    height={160}
+                    color={theme === 'redMean' ? colors.error : colors.primary}
+                    daysShort={daysShort}
+                  />
+                )
+              })()}
+            </View>
+
+            {/* Hourly chart */}
+            <Text style={[styles.chartTitle, { color: colors.text, marginTop: 16 }]}>{t('history.reports.hourly')}</Text>
+            <View style={styles.chartWrapper}>
+              {(() => {
+                const hourly = Array(24).fill(0)
+                entries.forEach((e: SmokeEntry) => {
+                  try {
+                    const d = new Date(e.date)
+                    const h = d.getHours()
+                    hourly[h] += e.count
+                  } catch {}
+                })
+                const labels = Array.from({ length: 24 }, (_, i) => (i % 3 === 0 ? String(i) : ''))
+                const data = hourly.map((v) => ({ cigarettes: v }))
+                return (
+                  <BarChart
+                    data={data}
+                    width={Dimensions.get('window').width - 64}
+                    height={160}
+                    color={theme === 'redMean' ? colors.error : colors.primary}
+                    labels={labels}
+                  />
+                )
+              })()}
+            </View>
+
+            {/* Goal vs Actual + Trend */}
+            <View style={[styles.analysisRow, { marginTop: 16 }]}> 
+              {(() => {
+                const todayKey = new Date().toISOString().split('T')[0]
+                const todayTotal = entries.filter(e => e.date.startsWith(todayKey)).reduce((s, e) => s + e.count, 0)
+                const actGoals = getActiveGoals ? getActiveGoals() : []
+                const dailyTarget = actGoals
+                  .map(g => g.target)
+                  .filter(tgt => typeof tgt === 'number' && tgt > 0 && tgt <= 10)
+                  .sort((a, b) => a - b)[0]
+                return (
+                  <View style={styles.card}>
+                    <Text style={styles.cardTitle}>{t('history.reports.goalVsActual.title')}</Text>
+                    <Text style={[styles.cardValue, { marginBottom: 4 }]}>
+                      {t('history.reports.goalVsActual.today')}: {todayTotal}
+                      {typeof dailyTarget === 'number' ? ` / ${t('history.reports.goalVsActual.target')}: ${dailyTarget}` : ''}
+                    </Text>
+                  </View>
+                )
+              })()}
+
+              {(() => {
+                const today = new Date()
+                const start2 = new Date(today)
+                start2.setDate(today.getDate() - 14)
+                const prevStart = new Date(today)
+                prevStart.setDate(today.getDate() - 28)
+                const prevEnd = new Date(today)
+                prevEnd.setDate(today.getDate() - 15)
+                let recent = 0, previous = 0
+                entries.forEach(e => {
+                  const d = new Date(e.date)
+                  if (d >= start2 && d <= today) recent += e.count
+                  else if (d >= prevStart && d <= prevEnd) previous += e.count
+                })
+                const pct = previous > 0 ? Math.round(((recent - previous) / previous) * 100) : 0
+                const up = pct > 0
+                const msg = pct === 0
+                  ? '—'
+                  : up
+                  ? t('history.reports.trend.increase', { percent: Math.abs(pct) })
+                  : t('history.reports.trend.decrease', { percent: Math.abs(pct) })
+                return (
+                  <View style={styles.card}>
+                    <Text style={styles.cardTitle}>{t('history.reports.trend.title')}</Text>
+                    <Text style={[styles.cardValue, { color: up ? colors.error : colors.success }]}>{msg}</Text>
+                  </View>
+                )
+              })()}
+            </View>
+          </View>
+        </View>
+
+        {/* Trigger Analysis */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Activity size={20} color={colors.primary} />
+              <Text style={styles.sectionTitle}>{t('triggers.analysisTitle')}</Text>
+            </View>
+          </View>
+          <View style={styles.sectionContent}>
+            {(() => {
+              // Parse [trg] tags from entry notes
+              const counters = {
+                emotion: new Map<string, number>(),
+                context: new Map<string, number>(),
+                place: new Map<string, number>(),
+              }
+              try {
+                entries.forEach((e: SmokeEntry) => {
+                  if (!e.notes) return
+                  const m = e.notes.match(/\[trg\]\s*([^]+)$/)
+                  if (!m) return
+                  const parts = m[1].split(';').map(s => s.trim())
+                  parts.forEach(p => {
+                    const [k, v] = p.split('=')
+                    if (!v) return
+                    const val = v.trim()
+                    if (!val) return
+                    if (k === 'e') counters.emotion.set(val, (counters.emotion.get(val) || 0) + e.count)
+                    if (k === 'c') counters.context.set(val, (counters.context.get(val) || 0) + e.count)
+                    if (k === 'p') counters.place.set(val, (counters.place.get(val) || 0) + e.count)
+                  })
+                })
+              } catch {}
+
+              const toTop = (m: Map<string, number>) => Array.from(m.entries()).sort((a,b)=>b[1]-a[1]).slice(0,3)
+              const topE = toTop(counters.emotion)
+              const topC = toTop(counters.context)
+              const topP = toTop(counters.place)
+
+              const empty = topE.length===0 && topC.length===0 && topP.length===0
+              if (empty) {
+                return <Text style={{ color: colors.textSecondary, textAlign: 'center' }}>{t('triggers.none')}</Text>
+              }
+
+              return (
+                <View style={{ gap: 12 }}>
+                  <View style={styles.card}>
+                    <Text style={styles.cardTitle}>{t('triggers.topEmotions')}</Text>
+                    {topE.map(([k,v]) => (
+                      <View key={`e-${k}`} style={styles.listItem}>
+                        <Text style={styles.listText}>{k}</Text>
+                        <Text style={styles.listCount}>{v}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <View style={styles.card}>
+                    <Text style={styles.cardTitle}>{t('triggers.topContexts')}</Text>
+                    {topC.map(([k,v]) => (
+                      <View key={`c-${k}`} style={styles.listItem}>
+                        <Text style={styles.listText}>{k}</Text>
+                        <Text style={styles.listCount}>{v}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <View style={styles.card}>
+                    <Text style={styles.cardTitle}>{t('triggers.topPlaces')}</Text>
+                    {topP.map(([k,v]) => (
+                      <View key={`p-${k}`} style={styles.listItem}>
+                        <Text style={styles.listText}>{k}</Text>
+                        <Text style={styles.listCount}>{v}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )
+            })()}
           </View>
         </View>
       </ScrollView>

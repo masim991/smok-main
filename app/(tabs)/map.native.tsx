@@ -7,10 +7,14 @@ import { useTranslation } from 'react-i18next';
 import { supabase, type SmokingZone } from '@/lib/supabase';
 import { notificationService } from '@/components/services/notifications/LocalNotifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSettings } from '@/contexts/SettingsContext';
+import { useData } from '@/components/contexts/DataContext';
 
 export default function SmokingZonesMap() {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { geofenceAutoCount } = useSettings();
+  const { addEntry } = useData();
   const mapRef = useRef<any>(null);
   const MapView = useMemo(() => require('react-native-maps').default, []);
   const Marker = useMemo(() => require('react-native-maps').Marker, []);
@@ -164,7 +168,7 @@ export default function SmokingZonesMap() {
   };
 
   const notifiedZoneIdsRef = useRef<Set<string>>(new Set());
-  const dwellMapRef = useRef<Map<string, { entryTime: number; notified3min: boolean }>>(new Map());
+  const dwellMapRef = useRef<Map<string, { entryTime: number; notified3min: boolean; counted: boolean }>>(new Map());
 
   const distanceMeters = (a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) => {
     const toRad = (x: number) => (x * Math.PI) / 180;
@@ -191,12 +195,17 @@ export default function SmokingZonesMap() {
         const now = Date.now();
         const rec = dwellMapRef.current.get(z.id);
         if (!rec) {
-          dwellMapRef.current.set(z.id, { entryTime: now, notified3min: false });
+          dwellMapRef.current.set(z.id, { entryTime: now, notified3min: false, counted: false });
         } else {
           const elapsed = now - rec.entryTime;
           if (!rec.notified3min && elapsed >= 3 * 60 * 1000) {
             notificationService.scheduleEncouragementNotification('흡연 중이신가요?', 0);
             dwellMapRef.current.set(z.id, { ...rec, notified3min: true });
+            if (geofenceAutoCount && !rec.counted) {
+              // Auto-add a single cigarette after dwell threshold
+              addEntry(1, `[#geo] zone=${z.title || z.id}; dwell>=3m`).catch(() => {});
+              dwellMapRef.current.set(z.id, { ...rec, notified3min: true, counted: true });
+            }
           }
         }
       } else {
