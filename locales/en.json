@@ -4,7 +4,7 @@
     "goals": "Goals",
     "history": "Stats",
     "settings": "Settings",
-    "map": "Smoke-free zones",
+    "map": "Smoking zones",
     "dashboard": "Dashboard"
   },
   "labels": {
@@ -68,17 +68,17 @@
     }
   },
   "map": {
-    "title": "Smoke-free zone map",
+    "title": "Smoking zone map",
     "useMyLocation": "Use my location",
-    "addZone": "Add smoke-free zone",
+    "addZone": "Add smoking zone",
     "zoneTitle": "Name",
     "zoneDescription": "Description",
     "save": "Save",
     "cancel": "Cancel",
     "loading": "Loading map...",
-    "noZones": "There are no registered zones in this area.",
+    "noZones": "There are no registered smoking zones in this area.",
     "locationPermissionTitle": "Location permission",
-    "locationPermissionBody": "We need your location to show smoke-free zones around you.",
+    "locationPermissionBody": "We need your location to show smoking zones around you.",
     "added": "Zone added.",
     "addFailed": "Failed to add zone.",
     "realtime": "Realtime updates enabled",
@@ -87,7 +87,7 @@
     "exitSelectMode": "Exit selection",
     "confirmCenter": "Select here",
     "viewZones": "View zones",
-    "zonesList": "Zone list",
+    "zonesList": "Smoking zone list",
     "centerHere": "Center here",
     "edit": "Edit",
     "delete": "Delete",
@@ -376,6 +376,41 @@
       "desc": "Keep tracking zones and dwell time even when the app is in the background.",
       "permissionTitle": "Background permission required",
       "permissionBody": "Please allow background location in system settings to enable this feature."
+    },
+    "geofence": {
+      "title": "Geofence auto count",
+      "enable": "Auto-count when dwelling in smoking zone",
+      "desc": "If you stay inside a saved smoking zone for the configured time, you'll receive a warning and one cigarette will be auto-counted.",
+      "dwellTitle": "Smoking zone dwell settings",
+      "dwell": {
+        "minutesLabel": "Dwell time (minutes)",
+        "minutesDesc": "When you stay in the same spot longer than this, auto-count and notifications will trigger.",
+        "notifModeLabel": "Notification mode",
+        "once": "Once",
+        "everyBlock": "Every block"
+      }
+    },
+    "wearable": {
+      "title": "Wearable detection",
+      "enable": "Detect via wearable (SpO2 + motion)",
+      "desc": "Compare oxygen saturation and motion patterns to infer smoking events.",
+      "unavailable": "Wearable sensors are not available on this device."
+    },
+    "audio": {
+      "title": "Audio detection",
+      "enable": "Detect lighter/smoking sounds",
+      "desc": "When no wearable is connected, listen for characteristic lighter or inhalation sounds to trigger a warning and auto-count.",
+      "unavailable": "Audio detection is not available."
+    },
+    "local": {
+      "enabledTitle": "Notifications enabled",
+      "enabledBody": "You will receive {{count}} reminders per day starting at {{time}}.",
+      "permissionTitle": "Permission required",
+      "permissionBody": "Please enable notifications in device settings."
+    },
+    "reminderSet": {
+      "title": "Set reminder time",
+      "body": "Choose your preferred reminder time"
     },
     "cost": {
       "title": "Cost tracking",

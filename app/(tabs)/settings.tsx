@@ -438,16 +438,16 @@ export default function SettingsTab() {
           </View>
         </SettingsSection>
 
-        {/* Geofence Dwell Settings */}
+        {/* 흡연 구역 체류 설정 */}
         <SettingsSection
-          title={t('settings.geofence.dwellTitle') || 'Smoking Zone Dwell Settings'}
+          title={t('settings.geofence.dwellTitle') || '흡연 구역 체류 설정'}
           icon={<MapIcon size={20} color={colors.primary} />}
         >
           <View style={styles.settingCard}>
             <View style={styles.settingRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.settingLabel}>체류 시간(분)</Text>
-                <Text style={styles.settingDescription}>설정한 분 이상 같은 위치에 머무르면 자동 기록/알림을 동작합니다. 기본 2분.</Text>
+                <Text style={styles.settingLabel}>{t('settings.geofence.dwell.minutesLabel')}</Text>
+                <Text style={styles.settingDescription}>{t('settings.geofence.dwell.minutesDesc')}</Text>
               </View>
               <TouchableOpacity
                 style={[styles.themeButton, { backgroundColor: colors.primary }]}
@@ -496,8 +496,8 @@ export default function SettingsTab() {
           <View style={styles.settingCard}>
             <View style={styles.settingRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.settingLabel}>알림 방식</Text>
-                <Text style={styles.settingDescription}>기준 시간 도달 시 한 번만 또는 도달 이후 매 분마다 알림을 울릴 수 있습니다.</Text>
+                <Text style={styles.settingLabel}>{t('settings.geofence.dwell.notifModeLabel')}</Text>
+                <Text style={styles.settingDescription}>{t('settings.geofence.desc')}</Text>
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
@@ -505,29 +505,29 @@ export default function SettingsTab() {
                 style={[styles.notificationTypeButton, { borderColor: colors.border, backgroundColor: stayNotificationMode === 'once' ? colors.primary : colors.background, flex: 1 }]}
                 onPress={() => setStayNotificationMode('once')}
               >
-                <Text style={[styles.notificationTypeText, { color: stayNotificationMode === 'once' ? '#fff' : colors.text }]}>한 번만</Text>
+                <Text style={[styles.notificationTypeText, { color: stayNotificationMode === 'once' ? '#fff' : colors.text }]}>{t('settings.geofence.dwell.once')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.notificationTypeButton, { borderColor: colors.border, backgroundColor: stayNotificationMode === 'every_block' ? colors.primary : colors.background, flex: 1 }]}
                 onPress={() => setStayNotificationMode('every_block')}
               >
-                <Text style={[styles.notificationTypeText, { color: stayNotificationMode === 'every_block' ? '#fff' : colors.text }]}>매 분마다</Text>
+                <Text style={[styles.notificationTypeText, { color: stayNotificationMode === 'every_block' ? '#fff' : colors.text }]}>{t('settings.geofence.dwell.everyBlock')}</Text>
               </TouchableOpacity>
             </View>
           </View>
         </SettingsSection>
 
-        {/* Geofence Auto Count */}
+        {/* 흡연 구역 자동 기록 */}
         <SettingsSection
-          title={t('settings.geofence.title') || 'Geofence Auto Count'}
+          title={t('settings.geofence.title') || '흡연 구역 자동 기록'}
           icon={<MapIcon size={20} color={colors.primary} />}
         >
           <View style={styles.settingCard}>
             <View style={styles.settingRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.settingLabel}>{t('settings.geofence.enable') || 'Auto-count when dwelling in smoking zone'}</Text>
+                <Text style={styles.settingLabel}>{t('settings.geofence.enable') || '흡연 구역 체류 시 자동 기록'}</Text>
                 <Text style={styles.settingDescription}>
-                  {t('settings.geofence.desc') || 'If you stay inside a saved zone for a few minutes, you will be warned and one cigarette will be auto-counted.'}
+                  {t('settings.geofence.desc') || '저장된 흡연 구역 반경 안에 일정 시간 이상 머무르면 경고와 함께 흡연 기록이 자동으로 추가됩니다.'}
                 </Text>
               </View>
               <Switch
@@ -540,17 +540,17 @@ export default function SettingsTab() {
           </View>
         </SettingsSection>
 
-        {/* Wearable Detection */}
+        {/* 웨어러블 감지 */}
         <SettingsSection
-          title={t('settings.wearable.title') || 'Wearable Detection'}
+          title={t('settings.wearable.title') || '웨어러블 감지'}
           icon={<TargetIcon size={20} color={colors.primary} />}
         >
           <View style={styles.settingCard}>
             <View style={styles.settingRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.settingLabel}>{t('settings.wearable.enable') || 'Detect via wearable (SpO2 + motion)'}</Text>
+                <Text style={styles.settingLabel}>{t('settings.wearable.enable') || '웨어러블로 감지(SpO2 + 움직임)'}</Text>
                 <Text style={styles.settingDescription}>
-                  {t('settings.wearable.desc') || 'Compare oxygen saturation before/during and motion patterns to infer smoking events.'}
+                  {t('settings.wearable.desc') || '산소포화도와 움직임 패턴을 비교해 흡연 가능성을 추정합니다.'}
                 </Text>
               </View>
               <Switch
@@ -565,7 +565,7 @@ export default function SettingsTab() {
                       } catch {}
                     });
                     if (!ok) {
-                      Alert.alert(t('common.error'), t('settings.wearable.unavailable') || 'Wearable sensors not available.');
+                      Alert.alert(t('common.error'), t('settings.wearable.unavailable') || '웨어러블 센서를 사용할 수 없습니다.');
                       await setWearableDetectionEnabled(false);
                     }
                   } else {
@@ -579,17 +579,17 @@ export default function SettingsTab() {
           </View>
         </SettingsSection>
 
-        {/* Audio Detection */}
+        {/* 오디오 감지 */}
         <SettingsSection
-          title={t('settings.audio.title') || 'Audio Detection'}
+          title={t('settings.audio.title') || '오디오 감지'}
           icon={<Bell size={20} color={colors.primary} />}
         >
           <View style={styles.settingCard}>
             <View style={styles.settingRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.settingLabel}>{t('settings.audio.enable') || 'Detect lighter/smoking sounds'}</Text>
+                <Text style={styles.settingLabel}>{t('settings.audio.enable') || '라이터/흡연 소리 감지'}</Text>
                 <Text style={styles.settingDescription}>
-                  {t('settings.audio.desc') || 'When no wearable is connected, listen for characteristic lighter or inhalation sounds to trigger a warning and auto-count.'}
+                  {t('settings.audio.desc') || '웨어러블이 없을 때 라이터/들이마시는 소리를 감지해 경고 및 자동 기록을 수행합니다.'}
                 </Text>
               </View>
               <Switch
@@ -604,7 +604,7 @@ export default function SettingsTab() {
                       } catch {}
                     });
                     if (!ok) {
-                      Alert.alert(t('common.error'), t('settings.audio.unavailable') || 'Audio detection not available.');
+                      Alert.alert(t('common.error'), t('settings.audio.unavailable') || '오디오 감지를 사용할 수 없습니다.');
                       await setAudioDetectionEnabled(false);
                     }
                   } else {
