@@ -127,6 +127,10 @@ export default function SettingsTab() {
     setWearableDetectionEnabled,
     audioDetectionEnabled,
     setAudioDetectionEnabled,
+    stayMinutes,
+    setStayMinutes,
+    stayNotificationMode,
+    setStayNotificationMode,
   } = useSettings();
   const [themeToggleCount, setThemeToggleCount] = useState(0);
   const { t } = useTranslation();
@@ -429,6 +433,85 @@ export default function SettingsTab() {
                 }}
               >
                 <Text style={styles.themeButtonText}>{user?.nickname || '-'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </SettingsSection>
+
+        {/* Geofence Dwell Settings */}
+        <SettingsSection
+          title={t('settings.geofence.dwellTitle') || 'Smoking Zone Dwell Settings'}
+          icon={<MapIcon size={20} color={colors.primary} />}
+        >
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingLabel}>체류 시간(분)</Text>
+                <Text style={styles.settingDescription}>설정한 분 이상 같은 위치에 머무르면 자동 기록/알림을 동작합니다. 기본 2분.</Text>
+              </View>
+              <TouchableOpacity
+                style={[styles.themeButton, { backgroundColor: colors.primary }]}
+                onPress={() => {
+                  if (Platform.OS === 'ios') {
+                    Alert.prompt(
+                      '체류 시간 설정',
+                      '분 단위로 입력하세요(최소 1분)',
+                      [
+                        { text: t('common.cancel'), style: 'cancel' },
+                        {
+                          text: t('common.save'),
+                          onPress: async (v?: string) => {
+                            const n = v ? parseInt(v, 10) : NaN;
+                            if (!Number.isNaN(n) && n >= 1 && n <= 60) {
+                              await setStayMinutes(n);
+                            } else {
+                              Alert.alert(t('common.error'), '1~60 사이의 값을 입력하세요.');
+                            }
+                          },
+                        },
+                      ],
+                      'plain-text',
+                      String(stayMinutes || 2)
+                    );
+                  } else {
+                    Alert.alert(
+                      '체류 시간 설정',
+                      '원하는 값을 선택하세요',
+                      [
+                        { text: '1', onPress: async () => setStayMinutes(1) },
+                        { text: '2', onPress: async () => setStayMinutes(2) },
+                        { text: '3', onPress: async () => setStayMinutes(3) },
+                        { text: '5', onPress: async () => setStayMinutes(5) },
+                        { text: '10', onPress: async () => setStayMinutes(10) },
+                        { text: t('common.cancel'), style: 'cancel' },
+                      ]
+                    );
+                  }
+                }}
+              >
+                <Text style={styles.themeButtonText}>{stayMinutes || 2}분</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingLabel}>알림 방식</Text>
+                <Text style={styles.settingDescription}>기준 시간 도달 시 한 번만 또는 도달 이후 매 분마다 알림을 울릴 수 있습니다.</Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+              <TouchableOpacity
+                style={[styles.notificationTypeButton, { borderColor: colors.border, backgroundColor: stayNotificationMode === 'once' ? colors.primary : colors.background, flex: 1 }]}
+                onPress={() => setStayNotificationMode('once')}
+              >
+                <Text style={[styles.notificationTypeText, { color: stayNotificationMode === 'once' ? '#fff' : colors.text }]}>한 번만</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.notificationTypeButton, { borderColor: colors.border, backgroundColor: stayNotificationMode === 'every_block' ? colors.primary : colors.background, flex: 1 }]}
+                onPress={() => setStayNotificationMode('every_block')}
+              >
+                <Text style={[styles.notificationTypeText, { color: stayNotificationMode === 'every_block' ? '#fff' : colors.text }]}>매 분마다</Text>
               </TouchableOpacity>
             </View>
           </View>

@@ -22,6 +22,10 @@ interface SettingsContextType {
   setWearableDetectionEnabled: (enabled: boolean) => void;
   audioDetectionEnabled: boolean;
   setAudioDetectionEnabled: (enabled: boolean) => void;
+  stayMinutes: number;
+  setStayMinutes: (min: number) => void;
+  stayNotificationMode: 'once' | 'every_block';
+  setStayNotificationMode: (mode: 'once' | 'every_block') => void;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -48,6 +52,8 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
   const [geofenceAutoCount, setGeofenceAutoCountState] = useState<boolean>(true);
   const [wearableDetectionEnabled, setWearableDetectionEnabledState] = useState<boolean>(false);
   const [audioDetectionEnabled, setAudioDetectionEnabledState] = useState<boolean>(false);
+  const [stayMinutes, setStayMinutesState] = useState<number>(2);
+  const [stayNotificationMode, setStayNotificationModeState] = useState<'once' | 'every_block'>('once');
 
   useEffect(() => {
     loadSettings();
@@ -55,7 +61,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
 
   const loadSettings = async () => {
     try {
-      const [savedReminders, savedNotifications, savedTime, savedLanguage, savedSmart, savedDailyGoal, savedGeofenceAutoCount, savedWearableEnabled, savedAudioEnabled] = await Promise.all([
+      const [savedReminders, savedNotifications, savedTime, savedLanguage, savedSmart, savedDailyGoal, savedGeofenceAutoCount, savedWearableEnabled, savedAudioEnabled, savedStayMinutes, savedStayNotifMode] = await Promise.all([
         AsyncStorage.getItem('remindersPerDay'),
         AsyncStorage.getItem('notificationsEnabled'),
         AsyncStorage.getItem('notificationTime'),
@@ -64,7 +70,9 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
         AsyncStorage.getItem('dailyGoalTarget'),
         AsyncStorage.getItem('geofenceAutoCount'),
         AsyncStorage.getItem('wearableDetectionEnabled'),
-        AsyncStorage.getItem('audioDetectionEnabled')
+        AsyncStorage.getItem('audioDetectionEnabled'),
+        AsyncStorage.getItem('stayMinutes'),
+        AsyncStorage.getItem('stayNotificationMode')
       ]);
       
       if (savedReminders) {
@@ -96,8 +104,33 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
       if (savedAudioEnabled != null) {
         setAudioDetectionEnabledState(savedAudioEnabled === 'true');
       }
+      if (savedStayMinutes && !Number.isNaN(Number(savedStayMinutes))) {
+        setStayMinutesState(Math.max(1, parseInt(savedStayMinutes, 10)));
+      }
+      if (savedStayNotifMode === 'once' || savedStayNotifMode === 'every_block') {
+        setStayNotificationModeState(savedStayNotifMode);
+      }
     } catch (error) {
       console.error('Error loading settings:', error);
+    }
+  };
+
+  const setStayMinutes = async (min: number) => {
+    try {
+      const v = Math.max(1, Math.floor(min));
+      setStayMinutesState(v);
+      await AsyncStorage.setItem('stayMinutes', String(v));
+    } catch (error) {
+      console.error('Error saving stay minutes:', error);
+    }
+  };
+
+  const setStayNotificationMode = async (mode: 'once' | 'every_block') => {
+    try {
+      setStayNotificationModeState(mode);
+      await AsyncStorage.setItem('stayNotificationMode', mode);
+    } catch (error) {
+      console.error('Error saving stay notification mode:', error);
     }
   };
 
@@ -204,7 +237,11 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
       wearableDetectionEnabled,
       setWearableDetectionEnabled,
       audioDetectionEnabled,
-      setAudioDetectionEnabled
+      setAudioDetectionEnabled,
+      stayMinutes,
+      setStayMinutes,
+      stayNotificationMode,
+      setStayNotificationMode
     }}>
       {children}
     </SettingsContext.Provider>
