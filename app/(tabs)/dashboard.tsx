@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, TextInput } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 import MapView, { Marker, Circle, MapPressEvent } from 'react-native-maps';
+import * as Location from 'expo-location';
 import { useLocationStay } from '@/contexts/LocationStayContext';
 
 export default function Dashboard() {
@@ -11,6 +12,42 @@ export default function Dashboard() {
   const { signOut, user } = useAuth();
   const { t } = useTranslation();
   const { settings: staySettings, setSettings: setStaySettings, enabled: stayEnabled, toggleEnabled, setFromCurrentLocation, runtime } = useLocationStay();
+  const mapRef = useRef<MapView | null>(null);
+
+  useEffect(() => {
+    if (staySettings.latitude == null || staySettings.longitude == null) {
+      setFromCurrentLocation();
+    }
+  }, [staySettings.latitude, staySettings.longitude, setFromCurrentLocation]);
+
+  const handleSetFromCurrentLocation = async () => {
+    await setFromCurrentLocation();
+    try {
+      const perm = await Location.getForegroundPermissionsAsync();
+      let status = perm.status;
+      if (status !== Location.PermissionStatus.GRANTED) {
+        const res = await Location.requestForegroundPermissionsAsync();
+        status = res.status;
+      }
+      if (status !== Location.PermissionStatus.GRANTED) {
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      if (mapRef.current) {
+        mapRef.current.animateToRegion(
+          {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01,
+          },
+          500,
+        );
+      }
+    } catch (e) {
+      console.error('Failed to move map to current location', e);
+    }
+  };
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
@@ -30,46 +67,22 @@ export default function Dashboard() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>{theme === 'redMean' ? 'YOUR BATTLE HUB' : t('dashboard.title')}</Text>
+        <Text style={styles.title}>{t('dashboardStay.screenTitle')}</Text>
         <Text style={styles.subtitle}>{user?.nickname || user?.email || 'Guest'}</Text>
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
         <View style={styles.content}>
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>흡연 구역 체류 알림</Text>
+            <Text style={styles.sectionTitle}>{t('dashboardStay.sectionTitle')}</Text>
             <View style={styles.rowBetween}>
-              <Text style={{ color: colors.textSecondary }}>기능</Text>
+              <Text style={{ color: colors.textSecondary }}>{t('dashboardStay.featureLabel')}</Text>
               <Switch value={stayEnabled} onValueChange={(v) => toggleEnabled(v)} />
             </View>
-            <Text style={styles.label}>타겟 위치 설정</Text>
+            <Text style={styles.label}>{t('dashboardStay.targetAutoLabel')}</Text>
             <View style={styles.inputRow}>
               <TextInput
                 style={styles.input}
-                placeholder="위도"
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="numeric"
-                value={staySettings.latitude != null ? String(staySettings.latitude) : ''}
-                onChangeText={(txt) => {
-                  const v = parseFloat(txt);
-                  setStaySettings({ latitude: isFinite(v) ? v : null });
-                }}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="경도"
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="numeric"
-                value={staySettings.longitude != null ? String(staySettings.longitude) : ''}
-                onChangeText={(txt) => {
-                  const v = parseFloat(txt);
-                  setStaySettings({ longitude: isFinite(v) ? v : null });
-                }}
-              />
-            </View>
-            <View style={styles.inputRow}>
-              <TextInput
-                style={styles.input}
-                placeholder="반경(m)"
+                placeholder={t('dashboardStay.radiusPlaceholder')}
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="numeric"
                 value={String(staySettings.radius ?? 50)}
@@ -79,15 +92,16 @@ export default function Dashboard() {
                 }}
               />
             </View>
-            <Text style={{ color: colors.textSecondary, marginTop: 6 }}>체류 시간은 설정 탭에서 변경할 수 있어요.</Text>
+            <Text style={{ color: colors.textSecondary, marginTop: 6 }}>{t('dashboardStay.timeHint')}</Text>
             <View style={{ marginTop: 8 }}>
-              <TouchableOpacity onPress={setFromCurrentLocation} style={{ alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}>
-                <Text style={{ color: colors.primary, fontWeight: '700' }}>현재 위치를 기준으로 설정</Text>
+              <TouchableOpacity onPress={handleSetFromCurrentLocation} style={{ alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}>
+                <Text style={{ color: colors.primary, fontWeight: '700' }}>{t('dashboardStay.setFromCurrent')}</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.map}>
               <MapView
                 style={{ flex: 1 }}
+                ref={mapRef}
                 initialRegion={{
                   latitude: staySettings.latitude ?? 37.5665,
                   longitude: staySettings.longitude ?? 126.978,
@@ -121,7 +135,7 @@ export default function Dashboard() {
             </View>
             <View style={{ marginTop: 12 }}>
               <Text style={{ color: colors.textSecondary }}>
-                상태: {runtime.inside ? '영역 안' : '영역 밖'} · 경과: {Math.floor((runtime.elapsedMs || 0) / 60000)}분 · 알림발송: {runtime.hasNotifiedForCurrentStay ? '예' : '아니오'}
+                {t('dashboardStay.statusPrefix')}: {runtime.inside ? t('dashboardStay.statusInside') : t('dashboardStay.statusOutside')} · {t('dashboardStay.statusElapsed')}: {Math.floor((runtime.elapsedMs || 0) / 60000)}{t('dashboardStay.statusMinutes')} · {runtime.hasNotifiedForCurrentStay ? t('dashboardStay.statusNotifiedYes') : t('dashboardStay.statusNotifiedNo')}
               </Text>
             </View>
           </View>

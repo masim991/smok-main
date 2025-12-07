@@ -5,7 +5,7 @@
     "history": "Stats",
     "settings": "Settings",
     "map": "Smoking zones",
-    "dashboard": "Dashboard"
+    "dashboard": "Dwell alert"
   },
   "labels": {
     "daysShort": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
@@ -32,7 +32,7 @@
     "verifyBody": "We sent a verification link to your email. Please check it and sign in again."
   },
   "dashboard": {
-    "title": "Dashboard",
+    "title": "Dwell alert",
     "activeGoals": "Active goals",
     "noActive": "No active goals.",
     "quickActions": "Quick actions",
@@ -44,6 +44,22 @@
       "settings": "Settings"
     },
     "signOut": "Sign out"
+  },
+  "dashboardStay": {
+    "screenTitle": "Dwell alert",
+    "sectionTitle": "Smoking zone dwell alert",
+    "featureLabel": "Feature",
+    "targetAutoLabel": "Target location is automatically set from your current location and the map.",
+    "radiusPlaceholder": "Radius (m)",
+    "timeHint": "You can change the dwell time in the Settings tab.",
+    "setFromCurrent": "Set based on current location",
+    "statusPrefix": "Status",
+    "statusInside": "Inside area",
+    "statusOutside": "Outside area",
+    "statusElapsed": "Elapsed",
+    "statusMinutes": "min",
+    "statusNotifiedYes": "Notified",
+    "statusNotifiedNo": "Not notified"
   },
   "log": {
     "title": "Today's log",

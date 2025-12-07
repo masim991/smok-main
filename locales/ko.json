@@ -5,7 +5,7 @@
     "history": "통계",
     "settings": "설정",
     "map": "흡연구역",
-    "dashboard": "대시보드"
+    "dashboard": "체류알림"
   },
   "triggers": {
     "emotion": "감정",
@@ -45,7 +45,7 @@
     "verifyBody": "인증 링크를 이메일로 보내드렸습니다. 확인 후 다시 로그인해주세요."
   },
   "dashboard": {
-    "title": "대시보드",
+    "title": "체류알림",
     "activeGoals": "진행 중인 목표",
     "noActive": "진행 중인 목표가 없습니다.",
     "quickActions": "빠른 실행",
@@ -57,6 +57,22 @@
       "settings": "설정"
     },
     "signOut": "로그아웃"
+  },
+  "dashboardStay": {
+    "screenTitle": "체류알림",
+    "sectionTitle": "흡연 구역 체류 알림",
+    "featureLabel": "기능",
+    "targetAutoLabel": "타겟 위치는 현재 위치와 지도에서 자동으로 설정됩니다.",
+    "radiusPlaceholder": "반경(m)",
+    "timeHint": "체류 시간은 설정 탭에서 변경할 수 있어요.",
+    "setFromCurrent": "현재 위치를 기준으로 설정",
+    "statusPrefix": "상태",
+    "statusInside": "영역 안",
+    "statusOutside": "영역 밖",
+    "statusElapsed": "경과",
+    "statusMinutes": "분",
+    "statusNotifiedYes": "알림발송: 예",
+    "statusNotifiedNo": "알림발송: 아니오"
   },
   "log": {
     "title": "오늘의 기록",
