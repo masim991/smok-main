@@ -1,5 +1,4 @@
 import * as Location from 'expo-location';
-import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 
 export const BG_LOCATION_TASK = 'bg-location-task';
@@ -22,8 +21,7 @@ export async function registerBackgroundLocationTask(): Promise<boolean> {
       if (locations.length > 0) {
         const last = locations[locations.length - 1];
         // Keep it light to avoid perf issues
-        // eslint-disable-next-line no-console
-        console.log('[BG Location] update:', last.coords.latitude, last.coords.longitude, 'acc', last.coords.accuracy);
+        void last;
       }
       return;
     });

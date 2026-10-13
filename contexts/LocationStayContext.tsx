@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, AppStateStatus, Platform, Alert } from 'react-native';
 import { isInsideRadius, LatLng } from '@/utils/location';
 import { useData } from '@/components/contexts/DataContext';
+import { localTestMode } from '@/lib/localTest';
 
 export const LOCATION_STAY_TASK = 'location-stay-monitor-task';
 
@@ -65,18 +66,25 @@ const LocationStayContext = createContext<LocationStayContextValue | undefined>(
 
 // Define background task once
 TaskManager.defineTask(LOCATION_STAY_TASK, async ({ data, error }) => {
+  if (localTestMode) return;
   if (error) {
     console.error('Location task error', error);
     return;
   }
   const { locations } = (data || {}) as any;
   if (!locations || locations.length === 0) return;
+  if (await AsyncStorage.getItem(STORAGE_KEYS.enabled) !== 'true') return;
 
   const rawSettings = await AsyncStorage.getItem(STORAGE_KEYS.settings);
   const rawRuntime = await AsyncStorage.getItem(STORAGE_KEYS.runtime);
 
-  const settings: StaySettings = rawSettings ? JSON.parse(rawSettings) : DEFAULT_SETTINGS;
-  let runtime: RuntimeState = rawRuntime ? JSON.parse(rawRuntime) : DEFAULT_RUNTIME;
+  let settings: StaySettings;
+  let runtime: RuntimeState;
+  try {
+    settings = rawSettings ? JSON.parse(rawSettings) : { ...DEFAULT_SETTINGS };
+    runtime = rawRuntime ? JSON.parse(rawRuntime) : { ...DEFAULT_RUNTIME };
+  } catch { return; }
+  if (!Number.isFinite(settings.radius) || settings.radius <= 0 || !Number.isFinite(runtime.elapsedMs)) return;
 
   const targetSet = settings.latitude != null && settings.longitude != null;
   if (!targetSet) {
@@ -89,11 +97,14 @@ TaskManager.defineTask(LOCATION_STAY_TASK, async ({ data, error }) => {
   const savedStayMinutes = await AsyncStorage.getItem('stayMinutes');
   const savedNotifMode = await AsyncStorage.getItem('stayNotificationMode');
   const savedAutoCount = await AsyncStorage.getItem('geofenceAutoCount');
-  const stayMinutes = Math.max(1, parseInt(savedStayMinutes || '2', 10));
+  const parsedStayMinutes = Number(savedStayMinutes || '2');
+  const stayMinutes = Number.isFinite(parsedStayMinutes) ? Math.max(1, Math.min(120, parsedStayMinutes)) : 2;
   const notificationMode: 'once' | 'every_block' = savedNotifMode === 'every_block' ? 'every_block' : 'once';
   const autoCountEnabled = savedAutoCount === 'true';
 
   for (const loc of locations) {
+    // Reject inaccurate fixes; otherwise GPS drift can create false stays.
+    if (!Number.isFinite(loc.coords?.accuracy) || loc.coords.accuracy > radius || !Number.isFinite(loc.timestamp)) continue;
     const current: LatLng = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
     const inside = isInsideRadius(current, center, radius);
 
@@ -103,6 +114,8 @@ TaskManager.defineTask(LOCATION_STAY_TASK, async ({ data, error }) => {
         runtime.startTime = (loc.timestamp as number) ?? Date.now();
         runtime.elapsedMs = 0;
         runtime.hasNotifiedForCurrentStay = false;
+        runtime.lastCountedIndex = 0;
+        runtime.lastNotifiedIndex = 0;
       } else {
         const start = runtime.startTime ?? Date.now();
         runtime.elapsedMs = Math.max(runtime.elapsedMs, ((loc.timestamp as number) ?? Date.now()) - start);
@@ -117,7 +130,8 @@ TaskManager.defineTask(LOCATION_STAY_TASK, async ({ data, error }) => {
           const newBlocks = Math.max(0, blocks - lastIdx);
           if (newBlocks > 0) {
             const rawPending = await AsyncStorage.getItem(STORAGE_KEYS.pendingCount);
-            const pending = rawPending ? parseInt(rawPending, 10) : 0;
+            const parsedPending = Number(rawPending || '0');
+            const pending = Number.isFinite(parsedPending) ? Math.max(0, parsedPending) : 0;
             await AsyncStorage.setItem(STORAGE_KEYS.pendingCount, String(pending + newBlocks));
             runtime.lastCountedIndex = blocks;
           }
@@ -183,10 +197,14 @@ export function LocationStayProvider({ children }: { children: React.ReactNode }
   });
   const [runtime, setRuntime] = useState<RuntimeState>(DEFAULT_RUNTIME);
   const appState = useRef<AppStateStatus>(AppState.currentState);
-  const { addEntry } = useData();
+  const { isLoading } = useData();
+  const loadingRef = useRef(isLoading);
+  loadingRef.current = isLoading;
+  const flushing = useRef(false);
 
   // Load persisted state
   useEffect(() => {
+    if (localTestMode) return;
     (async () => {
       try {
         const [rawS, rawE, rawR] = await Promise.all([
@@ -205,6 +223,7 @@ export function LocationStayProvider({ children }: { children: React.ReactNode }
 
   // Sync runtime from storage periodically (so UI reflects background updates)
   useEffect(() => {
+    if (localTestMode) return;
     const sub = AppState.addEventListener('change', async (next) => {
       appState.current = next;
       if (next === 'active') {
@@ -220,13 +239,17 @@ export function LocationStayProvider({ children }: { children: React.ReactNode }
         if (rawR) setRuntime(JSON.parse(rawR));
         // Flush pending auto-counts directly into entries
         const rawP = await AsyncStorage.getItem(STORAGE_KEYS.pendingCount);
-        const pending = rawP ? parseInt(rawP, 10) : 0;
-        if (pending > 0) {
-          await AsyncStorage.setItem(STORAGE_KEYS.pendingCount, '0');
+        const pending = Number(rawP || '0');
+        if (Number.isInteger(pending) && pending > 0 && !flushing.current && !loadingRef.current) {
+          flushing.current = true;
           try {
-            await addEntry(pending, '[#geofence] dwell');
+            // Location does not establish smoking. Ask the user before creating a health record.
+            Alert.alert('체류 기록 확인', '흡연 구역 체류가 감지되었습니다. 실제로 흡연했나요? 기록할 개수는 확인 후 입력해주세요.', [
+              { text: '확인', onPress: () => { void AsyncStorage.setItem(STORAGE_KEYS.pendingCount, '0').finally(() => { flushing.current = false; }); } },
+            ], { cancelable: false });
           } catch (e) {
             console.error('Failed to add geofence auto-count entries', e);
+            flushing.current = false;
           }
         }
       } catch {}
@@ -238,14 +261,22 @@ export function LocationStayProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const setSettings = useCallback(async (patch: Partial<StaySettings>) => {
+    if (localTestMode) {
+      setSettingsState(previous => ({ ...previous, ...patch }));
+      return;
+    }
     setSettingsState((prev) => {
       const next = { ...prev, ...patch };
-      AsyncStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(next)).catch(() => {});
+      if (next.latitude != null && (!Number.isFinite(next.latitude) || Math.abs(next.latitude) > 90)) throw new Error('위도를 확인해주세요.');
+      if (next.longitude != null && (!Number.isFinite(next.longitude) || Math.abs(next.longitude) > 180)) throw new Error('경도를 확인해주세요.');
+      if (!Number.isFinite(next.radius) || next.radius < 10 || next.radius > 10000) throw new Error('반경은 10~10000m 범위여야 합니다.');
+      AsyncStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(next)).catch(e => { console.error('위치 설정 저장 실패', e); });
       return next;
     });
   }, []);
 
   const requestAllPermissions = useCallback(async (): Promise<boolean> => {
+    if (localTestMode) return false;
     try {
       const { status: fg } = await Location.requestForegroundPermissionsAsync();
       const locationGranted = fg === Location.PermissionStatus.GRANTED;
@@ -261,7 +292,7 @@ export function LocationStayProvider({ children }: { children: React.ReactNode }
 
       setPermissions({ locationGranted, backgroundLocationGranted, notificationGranted });
 
-      if (!locationGranted || !notificationGranted) {
+      if (!locationGranted || !backgroundLocationGranted || !notificationGranted) {
         return false;
       }
       return true;
@@ -272,6 +303,7 @@ export function LocationStayProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const startBackgroundUpdates = useCallback(async () => {
+    if (localTestMode) return;
     const targetSet = settings.latitude != null && settings.longitude != null;
     if (!targetSet) return;
     const has = await Location.hasStartedLocationUpdatesAsync(LOCATION_STAY_TASK);
@@ -296,12 +328,26 @@ export function LocationStayProvider({ children }: { children: React.ReactNode }
   }, [settings.latitude, settings.longitude]);
 
   const stopBackgroundUpdates = useCallback(async () => {
+    if (localTestMode) return;
     const has = await Location.hasStartedLocationUpdatesAsync(LOCATION_STAY_TASK);
     if (has) await Location.stopLocationUpdatesAsync(LOCATION_STAY_TASK);
   }, []);
 
   const toggleEnabled = useCallback(async (on: boolean) => {
+    if (localTestMode) {
+      setEnabled(false);
+      if (on) Alert.alert('로컬 테스트', '로컬 테스트에서는 실제 위치 감지와 알림을 사용하지 않습니다.');
+      return;
+    }
     if (on) {
+      if (Platform.OS === 'web') {
+        Alert.alert('모바일 기능', '백그라운드 위치 감지는 Android/iOS 앱에서 사용할 수 있습니다.');
+        return;
+      }
+      if (settings.latitude == null || settings.longitude == null) {
+        Alert.alert('위치 설정 필요', '먼저 감지할 위치를 지정해주세요.');
+        return;
+      }
       const ok = await requestAllPermissions();
       if (!ok) {
         Alert.alert('권한 필요', '앱 설정에서 위치/알림 권한을 허용해야 기능을 사용할 수 있습니다.');
@@ -309,17 +355,21 @@ export function LocationStayProvider({ children }: { children: React.ReactNode }
         await AsyncStorage.setItem(STORAGE_KEYS.enabled, JSON.stringify(false));
         return;
       }
-      setEnabled(true);
-      await AsyncStorage.setItem(STORAGE_KEYS.enabled, JSON.stringify(true));
       await startBackgroundUpdates();
+      await AsyncStorage.setItem(STORAGE_KEYS.enabled, JSON.stringify(true));
+      setEnabled(true);
     } else {
       setEnabled(false);
       await AsyncStorage.setItem(STORAGE_KEYS.enabled, JSON.stringify(false));
       await stopBackgroundUpdates();
     }
-  }, [requestAllPermissions, startBackgroundUpdates, stopBackgroundUpdates]);
+  }, [requestAllPermissions, startBackgroundUpdates, stopBackgroundUpdates, settings.latitude, settings.longitude]);
 
   const setFromCurrentLocation = useCallback(async () => {
+    if (localTestMode) {
+      Alert.alert('로컬 테스트', '로컬 테스트에서는 기기의 실제 위치를 조회하지 않습니다.');
+      return;
+    }
     try {
       const perm = await Location.getForegroundPermissionsAsync();
       if (perm.status !== Location.PermissionStatus.GRANTED) {
@@ -336,15 +386,18 @@ export function LocationStayProvider({ children }: { children: React.ReactNode }
   // Auto-start updates if enabled and permissions ok
   useEffect(() => {
     (async () => {
-      if (!enabled) return;
-      const ok = await requestAllPermissions();
+      if (localTestMode || !enabled || Platform.OS === 'web') return;
+      // Resume with existing consent; permission prompts belong to the explicit enable action.
+      const [foreground, background, notification] = await Promise.all([Location.getForegroundPermissionsAsync(), Location.getBackgroundPermissionsAsync(), Notifications.getPermissionsAsync()]);
+      const ok = foreground.granted && background.granted && notification.granted;
+      setPermissions({ locationGranted: foreground.granted, backgroundLocationGranted: background.granted, notificationGranted: notification.granted });
       if (!ok) {
         setEnabled(false);
         await AsyncStorage.setItem(STORAGE_KEYS.enabled, JSON.stringify(false));
         return;
       }
       await startBackgroundUpdates();
-    })();
+    })().catch(e => { console.error('체류 감지 시작 실패', e); setEnabled(false); });
   }, [enabled, startBackgroundUpdates, requestAllPermissions]);
 
   const value = useMemo<LocationStayContextValue>(() => ({

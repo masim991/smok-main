@@ -6,14 +6,17 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Dimensions,
+  useWindowDimensions,
 
 } from "react-native"
+import { localDateKey, calendarDate } from '@/components/ui/localDate'
+import { ScreenHeader } from '@/components/ui/ScreenHeader'
 import { useTheme } from "@/contexts/ThemeContext"
 import { useTranslation } from 'react-i18next'
 import { useData } from "@/components/contexts/DataContext"
 import type { SmokeEntry } from "@/components/contexts/DataContext"
 import { Calendar as RNCalendar, type DateObject } from "react-native-calendars"
+import { setCalendarLocale } from '@/components/ui/calendarLocale'
 import {
   Calendar as CalendarIcon,
   ChevronDown,
@@ -49,7 +52,8 @@ const BarChart = ({ data, width, height, color, isMonthly = false, daysShort, la
   if (!data || data.length === 0) return null
 
   const maxValue = Math.max(...data.map((d) => d.cigarettes), 1)
-  const barWidth = (width - 40) / data.length - 10
+  const slotWidth = (width - 40) / data.length
+  const barWidth = Math.max(1, slotWidth * 0.6)
 
   const getXAxisLabel = (item: BarData, index: number) => {
     if (labels && labels[index] !== undefined) return labels[index]
@@ -63,7 +67,7 @@ const BarChart = ({ data, width, height, color, isMonthly = false, daysShort, la
     <View style={{ width, height, paddingHorizontal: 20 }}>
       <View style={{ flex: 1, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
         {data.map((item, index) => (
-          <View key={index} style={{ alignItems: "center" }}>
+          <View key={index} accessible accessibilityLabel={`${getXAxisLabel(item, index)}: ${item.cigarettes}`} style={{ alignItems: "center", width: slotWidth }}>
             <View
               style={{
                 width: barWidth,
@@ -71,7 +75,7 @@ const BarChart = ({ data, width, height, color, isMonthly = false, daysShort, la
                 backgroundColor: color,
                 borderTopLeftRadius: 4,
                 borderTopRightRadius: 4,
-                marginHorizontal: 5,
+                marginHorizontal: 0,
               }}
             />
             <Text style={{ fontSize: 10, color: color, marginTop: 4, fontWeight: '600' }}>
@@ -90,7 +94,11 @@ const BarChart = ({ data, width, height, color, isMonthly = false, daysShort, la
 
 export default function HistoryTab() {
   const { colors, theme } = useTheme()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  setCalendarLocale(i18n.language)
+  const { width: screenWidth } = useWindowDimensions()
+  const ko = i18n.language.startsWith('ko')
+  const label = (k: string, en: string) => ko ? k : en
   const { entries, getActiveGoals } = useData()
   const daysShort = t('labels.daysShort', { returnObjects: true }) as string[]
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
@@ -108,7 +116,7 @@ export default function HistoryTab() {
 
   // Calculate statistics
   useEffect(() => {
-    if (entries.length === 0) return;
+    if (entries.length === 0) { setStats({ total: 0, average: 0, trend: 0, streak: 0 }); return; }
 
     // Calculate total cigarettes
     const total = entries.reduce((sum, entry) => sum + entry.count, 0);
@@ -116,25 +124,28 @@ export default function HistoryTab() {
     // Calculate average per day
     const entriesByDate = new Map();
     entries.forEach(entry => {
-      const date = entry.date.split('T')[0];
+      const date = localDateKey(entry.date);
       entriesByDate.set(date, (entriesByDate.get(date) || 0) + entry.count);
     });
     const average = Math.round((total / entriesByDate.size) * 10) / 10;
 
-    // Calculate trend (simplified)
-    const firstHalf = entries.slice(0, Math.floor(entries.length / 2));
-    const secondHalf = entries.slice(Math.floor(entries.length / 2));
-    const firstAvg = firstHalf.reduce((sum, e) => sum + e.count, 0) / (firstHalf.length || 1);
-    const secondAvg = secondHalf.reduce((sum, e) => sum + e.count, 0) / (secondHalf.length || 1);
-    const trend = ((secondAvg - firstAvg) / (firstAvg || 1)) * 100;
-
-    // Calculate streak (simplified)
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const hasToday = entries.some(e => new Date(e.date).toDateString() === today.toDateString());
-    const hasYesterday = entries.some(e => new Date(e.date).toDateString() === yesterday.toDateString());
-    const streak = hasToday ? (hasYesterday ? 2 : 1) : 0;
+    // Compare equally sized calendar periods, independent of entry ordering.
+    const today = calendarDate(localDateKey());
+    const startRecent = new Date(today); startRecent.setDate(today.getDate() - 6);
+    const startPrevious = new Date(today); startPrevious.setDate(today.getDate() - 13);
+    let recent = 0, previous = 0;
+    entries.forEach(e => {
+      const date = calendarDate(localDateKey(e.date));
+      if (date >= startRecent && date <= today) recent += e.count;
+      else if (date >= startPrevious && date < startRecent) previous += e.count;
+    });
+    const trend = previous > 0 ? ((recent - previous) / previous) * 100 : 0;
+    // This is a logging streak. Missing records never prove abstinence.
+    let streak = 0;
+    const cursor = new Date(today);
+    while (entriesByDate.has(localDateKey(cursor))) {
+      streak += 1; cursor.setDate(cursor.getDate() - 1);
+    }
 
     setStats({
       total,
@@ -146,13 +157,13 @@ export default function HistoryTab() {
 
   // Helper function to get monthly trend data and marked dates
   const getMonthlyTrend = useMemo(() => {
-    const monthlyData: Array<{ date: string, cigarettes: number }> = [];
+    const monthlyData: { date: string, cigarettes: number }[] = [];
     const markedDates: Record<string, { marked: boolean, dotColor: string, selectedColor?: string }> = {};
 
     // Group entries by date to get daily totals
     const dailyTotals: Record<string, number> = {};
     entries.forEach(entry => {
-      const dateKey = entry.date.split('T')[0];
+      const dateKey = localDateKey(entry.date);
       dailyTotals[dateKey] = (dailyTotals[dateKey] || 0) + entry.count;
     });
 
@@ -164,7 +175,7 @@ export default function HistoryTab() {
       // Color coding based on cigarette count
       let dotColor = colors.success; // Green for smoke-free days
       let selectedColor = colors.success;
-      
+
       if (count > 0) {
         if (count <= 3) {
           dotColor = colors.warning; // Yellow for light smoking (1-3)
@@ -209,7 +220,7 @@ export default function HistoryTab() {
     const weeklyData: BarData[] = Array(7).fill(0).map((_, i) => {
       const currentDate = new Date(startOfWeek);
       currentDate.setDate(startOfWeek.getDate() + i);
-      const dateKey = currentDate.toISOString().split('T')[0];
+      const dateKey = localDateKey(currentDate);
 
       const dayTotal = dailyTotals[dateKey] || 0;
 
@@ -225,12 +236,12 @@ export default function HistoryTab() {
       markedDates,
       weeklyData
     };
-  }, [entries, theme, colors]);
+  }, [entries, theme, colors, daysShort]);
 
   // Get encouragement message based on selected date (i18n)
   const getEncouragement = (iso: string) => {
-    const entryCount = entries.filter((e: SmokeEntry) => e.date.startsWith(iso)).reduce((sum: number, e: SmokeEntry) => sum + e.count, 0)
-    if (entryCount === 0) return t('history.encouragement.zero')
+    const entryCount = entries.filter((e: SmokeEntry) => localDateKey(e.date) === iso).reduce((sum: number, e: SmokeEntry) => sum + e.count, 0)
+    if (entryCount === 0) return label('이 날짜에는 흡연 기록이 없습니다.', 'No smoking records for this date.')
     if (entryCount <= 3) return t('history.encouragement.low')
     return t('history.encouragement.high')
   }
@@ -238,7 +249,7 @@ export default function HistoryTab() {
   // Calculate selected date total
   const selectedTotal = selectedDate
     ? entries
-      .filter((e: SmokeEntry) => e.date.startsWith(selectedDate))
+      .filter((e: SmokeEntry) => localDateKey(e.date) === selectedDate)
       .reduce((sum: number, e: SmokeEntry) => sum + e.count, 0)
     : 0;
 
@@ -253,12 +264,15 @@ export default function HistoryTab() {
   const styles = StyleSheet.create({
     // Stats styles
     statCard: {
-      flex: 1,
+      flexGrow: 1,
+      flexBasis: '44%',
+      minWidth: 110,
       alignItems: 'center',
       justifyContent: 'center',
       padding: 12,
       borderRadius: 8,
       marginHorizontal: 4,
+      marginBottom: 8,
     },
     statValue: {
       fontSize: 22,
@@ -300,6 +314,8 @@ export default function HistoryTab() {
       flex: 1,
     },
     statsContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
       marginBottom: 24,
       backgroundColor: colors.surface,
       borderRadius: 16,
@@ -618,14 +634,7 @@ export default function HistoryTab() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { backgroundColor: colors.surface }]}>
-        <Text style={[styles.title, { color: colors.text }]}>
-          {t('history.title')}
-        </Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-          {t('history.subtitle')}
-        </Text>
-      </View>
+      <ScreenHeader title={t('history.title')} subtitle={t('history.subtitle')} />
 
       <ScrollView
         style={{ flex: 1 }}
@@ -638,6 +647,7 @@ export default function HistoryTab() {
         <View style={styles.sectionContainer}>
           <TouchableOpacity
             style={styles.sectionHeader}
+            accessibilityRole="button" accessibilityState={{ expanded: isStatsExpanded }}
             onPress={() => setIsStatsExpanded(!isStatsExpanded)}
             activeOpacity={0.7}
           >
@@ -706,7 +716,7 @@ export default function HistoryTab() {
                 </View>
                 <View style={[styles.statCard, { backgroundColor: colors.background }]}>
                   <Text style={[styles.statValue, { color: colors.primary }]}>{stats.average}</Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary, fontSize: 12 }]}>{t('history.stats.avgPerDay')}</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary, fontSize: 12 }]}>{label('기록일 평균', 'Average per logged day')}</Text>
                 </View>
                 <View style={[styles.statCard, { backgroundColor: colors.background }]}>
                   <Text
@@ -720,17 +730,17 @@ export default function HistoryTab() {
                   >
                     {stats.trend >= 0 ? '+' : ''}{stats.trend.toFixed(1)}%
                   </Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary, fontSize: 12 }]}>{t('history.stats.trend')}</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary, fontSize: 12 }]}>{label('최근 7일 변화', 'Last 7 days change')}</Text>
                 </View>
                 <View style={[styles.statCard, { backgroundColor: colors.background }]}>
                   <Text style={[styles.statValue, { color: colors.primary }]}>{stats.streak}</Text>
-                  <Text style={[styles.statLabel, { color: colors.textSecondary, fontSize: 12 }]}>{t('history.stats.dayStreak')}</Text>
+                  <Text style={[styles.statLabel, { color: colors.textSecondary, fontSize: 12 }]}>{label('연속 기록일', 'Logging streak')}</Text>
                 </View>
               </View>
 
               <View style={styles.chartContainer}>
                 <View style={styles.chartHeader}>
-                  <Text style={[styles.chartTitle, { color: colors.text }]}> 
+                  <Text style={[styles.chartTitle, { color: colors.text }]}>
                     {activeTab === 'week'
                       ? (theme === 'redMean' ? t('history.titles.weekRed') : t('history.titles.week'))
                       : (theme === 'redMean' ? t('history.titles.monthRed') : t('history.titles.month'))}
@@ -749,7 +759,7 @@ export default function HistoryTab() {
                 <View style={styles.chartWrapper}>
                   <BarChart
                     data={activeTab === 'week' ? getMonthlyTrend.weeklyData : getMonthlyTrend.monthlyData.slice(-6)}
-                    width={Dimensions.get('window').width - 64}
+                    width={Math.max(180, screenWidth - 64)}
                     height={200}
                     color={theme === 'redMean' ? colors.error : colors.primary}
                     isMonthly={activeTab === 'month'}
@@ -765,6 +775,7 @@ export default function HistoryTab() {
         <View style={styles.sectionContainer}>
           <TouchableOpacity
             style={styles.sectionHeader}
+            accessibilityRole="button" accessibilityState={{ expanded: isCalendarExpanded }}
             onPress={() => setIsCalendarExpanded(!isCalendarExpanded)}
             activeOpacity={0.7}
           >
@@ -785,7 +796,7 @@ export default function HistoryTab() {
             <View style={styles.sectionContent}>
               <View style={[styles.calendarContainer, { backgroundColor: colors.surface }]}>
                 <RNCalendar
-                  key={`calendar-${theme}`}
+                  key={`calendar-${theme}-${i18n.language}`}
                   onDayPress={(day: DateObject) => setSelectedDate(day.dateString)}
                   markedDates={{
                     ...getMonthlyTrend.markedDates,
@@ -833,7 +844,7 @@ export default function HistoryTab() {
               {selectedDate && (
                 <View style={styles.selectedDateContainer}>
                   <Text style={styles.selectedDateText}>
-                    {new Date(selectedDate).toLocaleDateString(undefined, {
+                    {calendarDate(selectedDate).toLocaleDateString(i18n.language, {
                       weekday: "long",
                       year: "numeric",
                       month: "long",
@@ -865,59 +876,11 @@ export default function HistoryTab() {
           )}
         </View>
 
-        {/* Stats Summary */}
         <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <TargetIcon size={20} color={colors.primary} />
-              <Text style={styles.sectionTitle}>
-                {theme === 'redMean' ? t('history.summary.titleRed') : t('history.summary.title')}
-              </Text>
-            </View>
-          </View>
+          <View style={styles.sectionHeader}><TargetIcon size={20} color={colors.primary} /><Text style={styles.sectionTitle}>{label('기록에서 확인한 변화', 'Insights from your records')}</Text></View>
           <View style={styles.sectionContent}>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>
-                  {(() => {
-                    // Calculate smoke-free days
-                    const dailyTotals: Record<string, number> = {};
-                    entries.forEach(entry => {
-                      const dateKey = entry.date.split('T')[0];
-                      dailyTotals[dateKey] = (dailyTotals[dateKey] || 0) + entry.count;
-                    });
-                    return Object.values(dailyTotals).filter(count => count === 0).length;
-                  })()}
-                </Text>
-                <Text style={styles.statLabel}>{theme === 'redMean' ? t('history.summary.daysRed') : t('history.summary.days')}</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>
-                  ₩{(() => {
-                    // Calculate money saved (assuming ₩4,500 per pack, 20 cigarettes per pack)
-                    const totalCigarettes = entries.reduce((sum, entry) => sum + entry.count, 0);
-                    const packsSaved = totalCigarettes / 20;
-                    const moneySaved = packsSaved * 4500;
-                    return Math.round(moneySaved).toLocaleString();
-                  })()}
-                </Text>
-                <Text style={styles.statLabel}>{theme === 'redMean' ? t('history.summary.moneyRed') : t('history.summary.money')}</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>
-                  {(() => {
-                    // Calculate cigarettes not smoked (based on previous average vs current)
-                    const totalCigarettes = entries.reduce((sum, entry) => sum + entry.count, 0);
-                    // Estimate cigarettes avoided (this is a simplified calculation)
-                    const estimatedAvoidance = Math.max(0, totalCigarettes * 0.3); // Assume 30% reduction
-                    return Math.round(estimatedAvoidance);
-                  })()}
-                </Text>
-                <Text style={styles.statLabel}>
-                  {theme === 'redMean' ? t('history.summary.cigsRed') : t('history.summary.cigs')}
-                </Text>
-              </View>
-            </View>
+            <Text style={{ color: colors.textSecondary, lineHeight: 22 }}>{label('금연일과 절약 금액은 확인된 기준선과 금연 기록이 필요합니다. 기록이 없는 날은 통계에서 금연일로 간주하지 않습니다.', 'Smoke-free days and savings need a confirmed baseline and abstinence records. Missing records are not treated as smoke-free days.')}</Text>
+            <Text style={{ color: colors.textSecondary, marginTop: 8, lineHeight: 22 }}>{label('변화율은 최근 7일과 이전 7일의 기록량을 비교합니다. 이전 기록량이 0이면 비교값은 0으로 표시됩니다.', 'Change compares logged totals for the last 7 days and the preceding 7 days. When the previous total is zero, the comparison displays zero.')}</Text>
           </View>
         </View>
 
@@ -946,7 +909,7 @@ export default function HistoryTab() {
                 return (
                   <BarChart
                     data={data}
-                    width={Dimensions.get('window').width - 64}
+                    width={Math.max(180, screenWidth - 64)}
                     height={160}
                     color={theme === 'redMean' ? colors.error : colors.primary}
                     daysShort={daysShort}
@@ -972,7 +935,7 @@ export default function HistoryTab() {
                 return (
                   <BarChart
                     data={data}
-                    width={Dimensions.get('window').width - 64}
+                    width={Math.max(180, screenWidth - 64)}
                     height={160}
                     color={theme === 'redMean' ? colors.error : colors.primary}
                     labels={labels}
@@ -982,12 +945,13 @@ export default function HistoryTab() {
             </View>
 
             {/* Goal vs Actual + Trend */}
-            <View style={[styles.analysisRow, { marginTop: 16 }]}> 
+            <View style={[styles.analysisRow, { marginTop: 16 }]}>
               {(() => {
-                const todayKey = new Date().toISOString().split('T')[0]
-                const todayTotal = entries.filter(e => e.date.startsWith(todayKey)).reduce((s, e) => s + e.count, 0)
+                const todayKey = localDateKey()
+                const todayTotal = entries.filter(e => localDateKey(e.date) === todayKey).reduce((s, e) => s + e.count, 0)
                 const actGoals = getActiveGoals ? getActiveGoals() : []
                 const dailyTarget = actGoals
+                  .filter(g => g.type === 'reduction' && g.reductionMode !== 'percentage')
                   .map(g => g.target)
                   .filter(tgt => typeof tgt === 'number' && tgt > 0 && tgt <= 10)
                   .sort((a, b) => a - b)[0]

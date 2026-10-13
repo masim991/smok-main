@@ -1,13 +1,13 @@
-"use client"
-
-import type * as React from "react"
-import { createContext, useContext, useState, useEffect, type ReactNode, useCallback } from "react"
-import { type IStorage, AsyncStorageProvider } from "@/components/services/storage/Storage"
-import { localMemoryStorage } from "@/components/services/storage/LocalMemoryStorage"
-import { notificationService } from "@/components/services/notifications/LocalNotifications"
-import { supabase } from "@/lib/supabase"
-import { useAuth } from "@/contexts/AuthContext"
-
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, useRef, type ReactNode } from 'react';
+import { AppState } from 'react-native';
+import type { IStorage } from '@/components/services/storage/Storage';
+import { localMemoryStorage } from '@/components/services/storage/LocalMemoryStorage';
+import { TrackingRepository, enqueueChange, acknowledgeChanges, reconcileRows, validGoal, type TrackingSnapshot, type PendingChange } from '@/components/services/storage/TrackingRepository';
+import { validEntry, localDay, totalOnDay, weeklySummary, monthlyTrend, completedSmokeFreeDays, isSmokeFreeCheckin } from '@/utils/tracking';
+import { fetchAllRows } from '@/utils/remoteRows';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
+import { LOCAL_TEST_USER_ID } from '@/lib/localTest';
 // 추천 목표 템플릿(초기 선택용)
 export const PRESET_GOALS = [
   {
@@ -62,6 +62,8 @@ export interface Goal {
   currentValue: number
   title: string
   description: string
+  reductionMode?: 'daily_limit' | 'percentage'
+  baselineDaily?: number
   completedAt?: string
   difficulty: 'easy' | 'medium' | 'hard' | 'extreme'
   icon: string
@@ -71,6 +73,10 @@ export interface Goal {
 
 // 전역 데이터 컨텍스트에서 제공하는 기능 정의
 interface DataContextType {
+  isLoading: boolean
+  error: string | null
+  syncStatus: 'local' | 'syncing' | 'synced' | 'offline'
+  retrySync: () => Promise<void>
   entries: SmokeEntry[]
   goals: Goal[]
   addEntry: (count: number, notes?: string) => Promise<void>
@@ -88,613 +94,164 @@ interface DataContextType {
   completeGoal: (id: string) => Promise<void>
 }
 
-const DataContext = createContext<DataContextType | undefined>(undefined)
 
-const GOALS_STORAGE_KEY = "@SmokeTracker:goals"
-
-const STORAGE_KEY = "@SmokeTracker:entries"
-
-interface DataProviderProps {
-  children: ReactNode
-  storage?: IStorage // Optional dependency injection for future DB swap
+const DataContext = createContext<DataContextType | undefined>(undefined);
+interface DataProviderProps { children: ReactNode; storage?: IStorage }
+function rowForGoal(g: Goal): Record<string, unknown> {
+  return { id: g.id, type: g.type, target: g.target, start_date: g.startDate, status: g.status, current_value: g.currentValue, title: g.title, description: g.description, completed_at: g.completedAt ?? null, difficulty: g.difficulty, icon: g.icon, red_mean_title: g.redMeanTitle ?? null, red_mean_description: g.redMeanDescription ?? null, reduction_mode: g.reductionMode ?? null, baseline_daily: g.baselineDaily ?? null };
 }
-
-// 앱 전역에서 기록/목표 데이터를 제공하고 로컬/원격(Supabase) 동기화를 담당
+function mapGoal(g: any): Goal {
+  return { id: g.id, type: g.type, target: g.target, startDate: g.start_date, status: g.status, currentValue: g.current_value, title: g.title, description: g.description, completedAt: g.completed_at ?? undefined, difficulty: g.difficulty, icon: g.icon, redMeanTitle: g.red_mean_title ?? undefined, redMeanDescription: g.red_mean_description ?? undefined, reductionMode: g.reduction_mode ?? undefined, baselineDaily: g.baseline_daily ?? undefined };
+}
+function goalValue(goal: Goal, entries: SmokeEntry[], now = new Date()): number {
+  if (goal.type !== 'reduction') return completedSmokeFreeDays(entries, goal.startDate, goal.type !== 'smoke_free_days', now);
+  const today = totalOnDay(entries, now);
+  if (goal.reductionMode === 'percentage' || (!goal.reductionMode && goal.target > 10)) {
+    let baseline = goal.baselineDaily;
+    if (!baseline) {
+      const start = new Date(goal.startDate); let total = 0;
+      for (let i = 1; i <= 7; i++) { const day = new Date(start); day.setDate(day.getDate() - i); total += totalOnDay(entries, day); }
+      baseline = total / 7;
+    }
+    return baseline > 0 ? Math.max(0, Math.min(100, (1 - today / baseline) * 100)) : 0;
+  }
+  return today;
+}
+function refreshGoals(snapshot: TrackingSnapshot): TrackingSnapshot {
+  let pending = snapshot.pending;
+  const goals = snapshot.goals.map(goal => {
+    if (goal.status !== 'active') return goal;
+    const currentValue = goalValue(goal, snapshot.entries);
+    const complete = goal.type !== 'reduction' && currentValue >= goal.target;
+    if (currentValue === goal.currentValue && !complete) return goal;
+    const next = { ...goal, currentValue, ...(complete ? { status: 'completed' as const, completedAt: new Date().toISOString() } : {}) };
+    pending = enqueueChange(pending, { table: 'goals', id: next.id, row: rowForGoal(next) });
+    return next;
+  });
+  return { ...snapshot, goals, pending };
+}
+let idSequence = 0;
+const makeId = () => Date.now().toString() + '-' + (++idSequence).toString(36) + '-' + Math.random().toString(36).slice(2, 10);
 export const DataProvider: React.FC<DataProviderProps> = ({ children, storage }) => {
-  const store = storage ?? localMemoryStorage
-  const [entries, setEntries] = useState<SmokeEntry[]>([])
-  const [goals, setGoals] = useState<Goal[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const { user } = useAuth()
-
-  // 로그인 후 Supabase에서 최신 데이터를 가져와 로컬에 반영
-  const syncFromSupabase = useCallback(async () => {
-    if (!user) return
+  const store = storage ?? localMemoryStorage;
+  const { user, loading: authLoading } = useAuth();
+  const owner = user?.id ?? 'guest';
+  const repository = useMemo(() => new TrackingRepository(store, owner), [store, owner]);
+  const currentRepository = useRef(repository); currentRepository.current = repository;
+  const [view, setView] = useState<{ repository: TrackingRepository; snapshot: TrackingSnapshot } | null>(null);
+  const [isLoading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<DataContextType['syncStatus']>('local');
+  const ready = useRef<TrackingRepository | null>(null);
+  const syncing = useRef(new Set<TrackingRepository>());
+  const publish = useCallback(() => { if (currentRepository.current === repository) setView({ repository, snapshot: repository.snapshot }); }, [repository]);
+  const sync = useCallback(async () => {
+    if (owner === 'guest' || owner === LOCAL_TEST_USER_ID || ready.current !== repository || currentRepository.current !== repository || syncing.current.has(repository)) return;
+    syncing.current.add(repository);
+    let failed = false;
+    setSyncStatus('syncing');
     try {
-      const { data: remoteEntries, error: e1 } = await supabase
-        .from('entries')
-        .select('id,date,count,notes')
-        .eq('user_id', user.id)
-      if (!e1 && remoteEntries) {
-        setEntries(remoteEntries as any)
-        await store.setItem(STORAGE_KEY, JSON.stringify(remoteEntries))
-      }
-    } catch (e) {
-      console.log('[Sync] Entries fetch skipped:', e)
-    }
-    try {
-      const { data: remoteGoals, error: e2 } = await supabase
-        .from('goals')
-        .select('id,type,target,start_date,status,current_value,title,description,completed_at,difficulty,icon,red_mean_title,red_mean_description')
-        .eq('user_id', user.id)
-      if (!e2 && remoteGoals) {
-        const mapped = (remoteGoals as any[]).map(g => ({
-          id: g.id,
-          type: g.type,
-          target: g.target,
-          startDate: g.start_date,
-          status: g.status,
-          currentValue: g.current_value,
-          title: g.title,
-          description: g.description,
-          completedAt: g.completed_at ?? undefined,
-          difficulty: g.difficulty,
-          icon: g.icon,
-          redMeanTitle: g.red_mean_title ?? undefined,
-          redMeanDescription: g.red_mean_description ?? undefined,
-        })) as Goal[]
-        setGoals(mapped)
-        await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(mapped))
-      }
-    } catch (e) {
-      console.log('[Sync] Goals fetch skipped:', e)
-    }
-  }, [user, store])
-
-  // Helper functions for goals
-  // 활성 목표 목록 반환
-  const getActiveGoals = useCallback(() => {
-    return goals.filter(goal => goal.status === 'active')
-  }, [goals])
-
-  // 완료된 목표 목록 반환
-  const getCompletedGoals = useCallback(() => {
-    return goals.filter(goal => goal.status === 'completed')
-  }, [goals])
-
-  const updateGoalProgress = useCallback(async (id: string, progress: number) => {
-    try {
-      const updatedGoals = goals.map(goal => 
-        goal.id === id ? { ...goal, currentValue: progress } as Goal : goal
-      )
-      setGoals(updatedGoals)
-      await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(updatedGoals))
-    } catch (error) {
-      console.error('Error updating goal progress:', error)
-      throw error
-    }
-  }, [goals, store])
-
-  const completeGoal = useCallback(async (id: string) => {
-    try {
-      const goal = goals.find(g => g.id === id)
-      const updatedGoals = goals.map(goal => 
-        goal.id === id ? { 
-          ...goal, 
-          status: 'completed' as const,
-          completedAt: new Date().toISOString() 
-        } as Goal : goal
-      )
-      setGoals(updatedGoals)
-      await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(updatedGoals))
-      
-      // Send congratulatory notification
-      if (goal) {
-        await notificationService.scheduleGoalReminder(
-          goal.title || 'Goal',
-          `🎉 Congratulations! You've completed your goal: ${goal.title}!`
-        )
-      }
-    } catch (error) {
-      console.error('Error completing goal:', error)
-      throw error
-    }
-  }, [goals, store])
-
-  // Load data on mount
-  // 마운트 시 로컬 저장소에서 데이터 로드
+        // Network work must not hold the local mutation queue: offline recording remains immediate.
+        const snapshot = repository.snapshot;
+        const acknowledged = new Set<PendingChange>();
+        for (const p of snapshot.pending) {
+          if (currentRepository.current !== repository || repository.isRetired) return;
+          const response = p.deleted
+            ? await supabase.from(p.table).delete().eq('user_id', owner).eq('id', p.id)
+            : await supabase.from(p.table).upsert({ ...p.row, user_id: owner });
+          if (response.error) { failed = true; break; }
+          acknowledged.add(p);
+        }
+        const [remoteEntries, remoteGoals] = await Promise.all([
+          fetchAllRows<SmokeEntry>((start, end) => supabase.from('entries').select('id,date,count,notes').eq('user_id', owner).order('id').range(start, end)),
+          fetchAllRows<any>((start, end) => supabase.from('goals').select('*').eq('user_id', owner).order('id').range(start, end)),
+        ]);
+        if (!remoteEntries.every(validEntry) || !remoteGoals.map(mapGoal).every(validGoal)) {
+          throw new Error('원격 데이터 형식이 올바르지 않습니다.');
+        }
+        if (currentRepository.current !== repository || repository.isRetired) return;
+        await repository.transact(current => {
+        // A newer local edit produces a new change object and cannot be removed by an old acknowledgement.
+        const pending = acknowledgeChanges(current.pending, acknowledged);
+        // Pending local changes override remote values; tombstones prevent deleted rows reappearing.
+        return { next: refreshGoals({ version: 1, entries: reconcileRows<SmokeEntry>(remoteEntries.map(entry => ({ ...entry, notes: entry.notes ?? undefined })), current.entries, 'entries', pending), goals: reconcileRows<Goal>(remoteGoals.map(mapGoal), current.goals, 'goals', pending), pending }), result: undefined };
+      });
+      if (currentRepository.current === repository) { publish(); setSyncStatus(failed || repository.snapshot.pending.length ? 'offline' : 'synced'); }
+    } catch { if (currentRepository.current === repository) setSyncStatus('offline'); }
+    finally { syncing.current.delete(repository); }
+  }, [repository, owner, publish]);
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true)
+    let active = true; ready.current = null; setLoading(true); setError(null); setView(null); setSyncStatus('local');
+    if (!authLoading) repository.load().then(() => {
+      if (!active) return; ready.current = repository; publish(); setLoading(false); void sync();
+    }).catch(() => { if (active) { setError('데이터를 불러오지 못했습니다. 저장된 원본은 보존됩니다.'); setLoading(false); } });
+    return () => { active = false; };
+  }, [repository, authLoading, publish, sync]);
+  useEffect(() => {
+    const listener = AppState.addEventListener('change', state => { if (state === 'active') void sync(); });
+    const timer = setInterval(() => void sync(), 60_000);
+    return () => { listener.remove(); clearInterval(timer); };
+  }, [sync]);
+  const retrySync = async (): Promise<void> => {
+    if (authLoading || currentRepository.current !== repository) return;
+    if (ready.current !== repository) {
+      setLoading(true); setError(null);
       try {
-        // Preload frequently accessed keys
-        await store.preloadData?.([STORAGE_KEY, GOALS_STORAGE_KEY])
-        
-        const pairs = await store.multiGet([STORAGE_KEY, GOALS_STORAGE_KEY])
-        const entriesJson = pairs.find(([key]: [string, string | null]) => key === STORAGE_KEY)?.[1]
-        const goalsJson = pairs.find(([key]: [string, string | null]) => key === GOALS_STORAGE_KEY)?.[1]
-        
-        if (entriesJson) {
-          const parsedEntries = JSON.parse(entriesJson)
-          setEntries(parsedEntries)
-        }
-        if (goalsJson) {
-          const parsedGoals = JSON.parse(goalsJson)
-          setGoals(parsedGoals)
-        }
-      } catch (e) {
-        console.error("Failed to load data", e)
-      } finally {
-        setIsLoading(false)
-      }
+        store.clearCache?.();
+        await repository.load();
+        if (currentRepository.current !== repository) return;
+        ready.current = repository; publish();
+      } catch {
+        if (currentRepository.current === repository) setError('데이터를 불러오지 못했습니다. 저장된 원본은 보존됩니다.');
+        return;
+      } finally { if (currentRepository.current === repository) setLoading(false); }
     }
-    loadData()
-  }, [store])
-
-  // 로그인 상태가 생기면 원격 동기화 시도
-  useEffect(() => {
-    if (user) {
-      syncFromSupabase()
-    }
-  }, [user, syncFromSupabase])
-
-  // entries 변경 시 로컬 저장소에 저장
-  useEffect(() => {
-    const saveData = async () => {
-      if (entries.length > 0 || isLoading === false) { // Only save if we have data or finished loading
-        try {
-          await store.setItem(STORAGE_KEY, JSON.stringify(entries))
-          console.log('Entries saved successfully:', entries.length)
-        } catch (e) {
-          console.error("Failed to save entries data", e)
-        }
-      }
-    }
-    saveData()
-  }, [entries, store, isLoading])
-
-  // goals 변경 시 로컬 저장소에 저장
-  useEffect(() => {
-    const saveGoals = async () => {
-      if (goals.length > 0 || isLoading === false) { // Only save if we have data or finished loading
-        try {
-          await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(goals))
-          console.log('Goals saved successfully:', goals.length)
-        } catch (e) {
-          console.error("Failed to save goals data", e)
-        }
-      }
-    }
-    saveGoals()
-  }, [goals, store, isLoading])
-
-  // 기록 추가: 로컬 상태/저장소 갱신 후 로그인 시 Supabase upsert
-  const addEntry = async (count: number, notes?: string): Promise<void> => {
-    try {
-      const newEntry: SmokeEntry = {
-        id: Date.now().toString(),
-        date: new Date().toISOString(),
-        count,
-        notes,
-      }
-      const updatedEntries = [...entries, newEntry]
-      setEntries(updatedEntries)
-      await store.setItem(STORAGE_KEY, JSON.stringify(updatedEntries))
-      // remote upsert
-      if (user) {
-        try {
-          await supabase.from('entries').upsert({
-            id: newEntry.id,
-            user_id: user.id,
-            date: newEntry.date,
-            count: newEntry.count,
-            notes: newEntry.notes ?? null,
-          })
-        } catch (e) {
-          console.log('[Sync] addEntry upsert skipped:', e)
-        }
-      }
-    } catch (error) {
-      console.error("Error adding entry:", error)
-      throw error
-    }
-  }
-
-  // 기록 삭제: 로컬/원격 삭제
-  const removeEntry = async (id: string) => {
-    try {
-      const updatedEntries = entries.filter((e) => e.id !== id)
-      setEntries(updatedEntries)
-      await store.setItem(STORAGE_KEY, JSON.stringify(updatedEntries))
-      if (user) {
-        try {
-          await supabase.from('entries').delete().eq('user_id', user.id).eq('id', id)
-        } catch (e) {
-          console.log('[Sync] removeEntry delete skipped:', e)
-        }
-      }
-    } catch (error) {
-      console.error("Error removing entry:", error)
-      throw error
-    }
-  }
-
-  // 목표 추가: 기본값/시작일 설정 후 로컬/원격 반영 + 알림 예약
-  const addGoal = async (goal: Omit<Goal, "id" | "status" | "startDate" | "completedAt">) => {
-    try {
-      // If target is 0, calculate it based on user's average for reduction goals
-      let target = goal.target
-      if (goal.type === "reduction" && target === 0) {
-        const weeklyAvg = getWeeklySummary().reduce((sum, day) => sum + day.cigarettes, 0) / 7
-        target = Math.max(1, Math.floor(weeklyAvg * 0.5)) // Default to half of weekly average
-      }
-
-      const newGoal: Goal = {
-        ...goal,
-        target,
-        id: Date.now().toString(),
-        status: "active",
-        startDate: new Date().toISOString(),
-        currentValue: goal.currentValue || 0,
-      }
-      const updatedGoals = [...goals, newGoal]
-      setGoals(updatedGoals)
-      await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(updatedGoals))
-      if (user) {
-        try {
-          await supabase.from('goals').upsert({
-            id: newGoal.id,
-            user_id: user.id,
-            type: newGoal.type,
-            target: newGoal.target,
-            start_date: newGoal.startDate,
-            status: newGoal.status,
-            current_value: newGoal.currentValue,
-            title: newGoal.title,
-            description: newGoal.description,
-            completed_at: newGoal.completedAt ?? null,
-            difficulty: newGoal.difficulty,
-            icon: newGoal.icon,
-            red_mean_title: newGoal.redMeanTitle ?? null,
-            red_mean_description: newGoal.redMeanDescription ?? null,
-          })
-        } catch (e) {
-          console.log('[Sync] addGoal upsert skipped:', e)
-        }
-      }
-      
-      // Schedule notification for new goal
-      try {
-        await notificationService.scheduleGoalReminder(newGoal.title, newGoal.description)
-      } catch (notifError) {
-        console.log('Could not schedule notification:', notifError)
-      }
-      
-      return newGoal
-    } catch (error) {
-      console.error("Error adding goal:", error)
-      throw error
-    }
-  }
-
-  // 목표 업데이트: 완료 조건 체크 포함, 로컬/원격 반영
-  const updateGoal = async (id: string, updates: Partial<Goal>) => {
-    try {
-      const updatedGoals = goals.map((goal) => {
-        if (goal.id === id) {
-          const updatedGoal = { ...goal, ...updates }
-          // Check if goal is completed
-          if (
-            updatedGoal.currentValue !== undefined &&
-            updatedGoal.currentValue >= updatedGoal.target &&
-            updatedGoal.status !== "completed"
-          ) {
-            updatedGoal.status = "completed"
-            updatedGoal.completedAt = new Date().toISOString()
-          }
-          return updatedGoal
-        }
-        return goal
-      })
-
-      setGoals(updatedGoals)
-      await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(updatedGoals))
-      if (user) {
-        try {
-          const g = updatedGoals.find((gg) => gg.id === id)
-          if (g) {
-            await supabase.from('goals').upsert({
-              id: g.id,
-              user_id: user.id,
-              type: g.type,
-              target: g.target,
-              start_date: g.startDate,
-              status: g.status,
-              current_value: g.currentValue,
-              title: g.title,
-              description: g.description,
-              completed_at: g.completedAt ?? null,
-              difficulty: g.difficulty,
-              icon: g.icon,
-              red_mean_title: g.redMeanTitle ?? null,
-              red_mean_description: g.redMeanDescription ?? null,
-            })
-          }
-        } catch (e) {
-          console.log('[Sync] updateGoal upsert skipped:', e)
-        }
-      }
-      return updatedGoals.find((g) => g.id === id)
-    } catch (error) {
-      console.error("Error updating goal:", error)
-      throw error
-    }
-  }
-
-  // 목표 삭제: 로컬/원격 반영
-  const removeGoal = async (id: string) => {
-    try {
-      const updatedGoals = goals.filter((goal) => goal.id !== id)
-      setGoals(updatedGoals)
-      await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(updatedGoals))
-      if (user) {
-        try {
-          await supabase.from('goals').delete().eq('user_id', user.id).eq('id', id)
-        } catch (e) {
-          console.log('[Sync] removeGoal delete skipped:', e)
-        }
-      }
-    } catch (error) {
-      console.error("Error removing goal:", error)
-      throw error
-    }
-  }
-
-  // 특정 날짜의 기록 반환
-  const getEntriesByDate = (date: Date): SmokeEntry[] => {
-    try {
-      const dateString = date.toISOString().split("T")[0]
-      return entries.filter((entry) => entry.date.startsWith(dateString))
-    } catch (error) {
-      console.error("Error getting entries by date:", error)
-      return []
-    }
-  }
-
-  // 최근 1주 요약(요일별 총 개비)
-  const getWeeklySummary = (): { day: string; date: string; cigarettes: number }[] => {
-    try {
-      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-      const today = new Date()
-      const weekStart = new Date(today)
-      weekStart.setDate(today.getDate() - today.getDay()) // Start of current week
-
-      return days.map((day, index) => {
-        const currentDate = new Date(weekStart)
-        currentDate.setDate(weekStart.getDate() + index)
-        const dateString = currentDate.toISOString().split("T")[0]
-
-        const dayEntries = entries.filter((entry) => entry.date.startsWith(dateString))
-
-        const totalCigarettes = dayEntries.reduce((sum, entry) => sum + entry.count, 0)
-
-        return {
-          day,
-          date: dateString,
-          cigarettes: totalCigarettes,
-        }
-      })
-    } catch (error) {
-      console.error("Error getting weekly summary:", error)
-      return []
-    }
-  }
-
-  // 이번 달 주차별 평균 추세
-  const getMonthlyTrend = (): { week: number; average: number; startDate: string; endDate: string }[] => {
-    try {
-      const result = []
-      const today = new Date()
-      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
-      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-
-      const currentStart = new Date(firstDay)
-      let weekNumber = 1
-
-      while (currentStart <= lastDay) {
-        const currentEnd = new Date(currentStart)
-        currentEnd.setDate(currentStart.getDate() + 6)
-        if (currentEnd > lastDay) currentEnd.setDate(lastDay.getDate())
-
-        const weekEntries = entries.filter((entry) => {
-          const entryDate = new Date(entry.date)
-          return entryDate >= currentStart && entryDate <= currentEnd
-        })
-
-        const totalCigarettes = weekEntries.reduce((sum, entry) => sum + entry.count, 0)
-        const daysInWeek = Math.ceil((currentEnd.getTime() - currentStart.getTime() + 1) / (1000 * 60 * 60 * 24))
-
-        result.push({
-          week: weekNumber,
-          average: daysInWeek > 0 ? totalCigarettes / daysInWeek : 0,
-          startDate: currentStart.toISOString().split("T")[0],
-          endDate: currentEnd.toISOString().split("T")[0],
-        })
-
-        currentStart.setDate(currentStart.getDate() + 7)
-        weekNumber++
-      }
-
-      return result
-    } catch (error) {
-      console.error("Error getting monthly trend:", error)
-      return []
-    }
-  }
-
-  // entries 변화에 따라 활성 목표의 진행도 갱신 및 완료 처리
-  const updateGoalsProgress = useCallback(async () => {
-    try {
-      if (goals.length === 0) return;
-      
-      const updatedGoals = goals.map((goal) => {
-        if (goal.status !== "active") return goal
-
-        let currentValue = 0
-
-        if (goal.type === "reduction") {
-          // For reduction goals, track daily average reduction
-          const weeklyData = getWeeklySummary()
-          const weeklyTotal = weeklyData.reduce((sum, day) => sum + day.cigarettes, 0)
-          currentValue = Math.max(0, goal.target - (weeklyTotal / 7)) // Progress towards reduction
-        } else if (goal.type === "smoke_free_days") {
-          // For smoke-free days, count days with 0 cigarettes this week
-          const smokeFreeDays = getWeeklySummary().filter((day) => day.cigarettes === 0).length
-          currentValue = smokeFreeDays
-        } else if (goal.type === "milestone") {
-          // For milestones, count consecutive days without smoking from today backwards
-          const today = new Date()
-          let consecutiveDays = 0
-          
-          for (let i = 0; i < goal.target; i++) {
-            const checkDate = new Date(today)
-            checkDate.setDate(today.getDate() - i)
-            const dateString = checkDate.toISOString().split("T")[0]
-            
-            const dayEntries = entries.filter(e => e.date.startsWith(dateString))
-            const dayTotal = dayEntries.reduce((sum, e) => sum + e.count, 0)
-            
-            if (dayTotal === 0) {
-              consecutiveDays++
-            } else {
-              break
-            }
-          }
-          currentValue = consecutiveDays
-        }
-
-        // Check if goal should be completed
-        const shouldComplete = currentValue >= goal.target && goal.status === "active"
-        
-        // Send notification for goal completion
-        if (shouldComplete) {
-          notificationService.scheduleGoalReminder(
-            goal.title || 'Goal',
-            `🎉 Amazing! You've reached your goal: ${goal.title}!`
-          ).catch(console.error)
-        }
-        
-        return { 
-          ...goal, 
-          currentValue,
-          ...(shouldComplete && {
-            status: "completed" as const,
-            completedAt: new Date().toISOString()
-          })
-        }
-      })
-
-      // Only update if there are actual changes
-      const hasChanges = updatedGoals.some((goal, index) => 
-        goal.currentValue !== goals[index].currentValue || 
-        goal.status !== goals[index].status
-      )
-
-      if (hasChanges) {
-        setGoals(updatedGoals)
-        await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(updatedGoals))
-      }
-    } catch (error) {
-      console.error("Error updating goals progress:", error)
-    }
-  }, [entries, goals, store, getWeeklySummary])
-
-  // entries 변경 시 진행도 자동 업데이트
-  useEffect(() => {
-    if (entries.length > 0) {
-      updateGoalsProgress()
-    }
-  }, [entries, updateGoalsProgress])
-
-  // 개별 목표 진행도 계산(퍼센트)
+    await sync();
+  };
+  const mutate = async <T,>(operation: (snapshot: TrackingSnapshot) => { next: TrackingSnapshot; result: T }) => {
+    if (ready.current !== repository || currentRepository.current !== repository) throw new Error('데이터 준비 후 다시 시도해주세요.');
+    const result = await repository.transact(snapshot => {
+      if (currentRepository.current !== repository) throw new Error('계정이 변경되었습니다. 다시 시도해주세요.');
+      const change = operation(snapshot); return { ...change, next: refreshGoals(change.next) };
+    });
+    publish(); void sync(); return result;
+  };
+  const entries = view?.repository === repository ? view.snapshot.entries : [];
+  const goals = view?.repository === repository ? view.snapshot.goals : [];
+  const addEntry = async (count: number, notes?: string) => {
+    const entry: SmokeEntry = { id: makeId(), date: new Date().toISOString(), count, notes: notes?.trim().slice(0, 2000) };
+    if (!validEntry(entry)) throw new Error('흡연 개수는 1~1000 사이 정수여야 합니다. 금연 확인은 전용 버튼을 사용해주세요.');
+    await mutate(s => {
+      if (isSmokeFreeCheckin(entry) && s.entries.some(existing => isSmokeFreeCheckin(existing) && localDay(new Date(existing.date)) === localDay(new Date(entry.date)))) return { next: s, result: undefined };
+      return { next: { ...s, entries: [...s.entries, entry], pending: enqueueChange(s.pending, { table: 'entries', id: entry.id, row: { ...entry, notes: entry.notes ?? null } }) }, result: undefined };
+    });
+  };
+  const removeEntry = async (id: string) => { await mutate(s => ({ next: { ...s, entries: s.entries.filter(e => e.id !== id), pending: enqueueChange(s.pending, { table: 'entries', id, deleted: true }) }, result: undefined })); };
+  const addGoal = async (input: Omit<Goal, 'id' | 'status' | 'startDate' | 'completedAt'>) => {
+    const target = input.target === 0 && input.type === 'reduction' ? Math.max(1, Math.floor(weeklySummary(entries).reduce((a, b) => a + b.cigarettes, 0) / 14)) : input.target;
+    const goal: Goal = { ...input, id: makeId(), target, startDate: new Date().toISOString(), status: 'active', currentValue: 0 };
+    if (!validGoal(goal)) throw new Error('목표 형식을 확인해주세요.');
+    return mutate(s => ({ next: { ...s, goals: [...s.goals, goal], pending: enqueueChange(s.pending, { table: 'goals', id: goal.id, row: rowForGoal(goal) }) }, result: goal }));
+  };
+  const updateGoal = async (id: string, updates: Partial<Goal>) => mutate(s => {
+    const old = s.goals.find(g => g.id === id); if (!old) return { next: s, result: undefined };
+    const goal = { ...old, ...updates, id: old.id, startDate: old.startDate };
+    if (!validGoal(goal)) throw new Error('목표 형식을 확인해주세요.');
+    return { next: { ...s, goals: s.goals.map(g => g.id === id ? goal : g), pending: enqueueChange(s.pending, { table: 'goals', id, row: rowForGoal(goal) }) }, result: goal };
+  });
+  const removeGoal = async (id: string) => { await mutate(s => ({ next: { ...s, goals: s.goals.filter(g => g.id !== id), pending: enqueueChange(s.pending, { table: 'goals', id, deleted: true }) }, result: undefined })); };
   const getGoalProgress = (goal: Goal) => {
-    const current = goal.currentValue || 0
-    let progress = 0
-    
-    if (goal.target > 0) {
-      switch (goal.type) {
-        case "reduction":
-          // For reduction goals, progress is based on staying under daily limit
-          const today = new Date().toISOString().split('T')[0]
-          const todayEntries = entries.filter(e => e.date.startsWith(today))
-          const todayCount = todayEntries.reduce((sum, e) => sum + e.count, 0)
-          if (goal.target <= 10) {
-            // Daily limit goals
-            progress = todayCount <= goal.target ? 100 : Math.max(0, 100 - ((todayCount - goal.target) / goal.target) * 50)
-          } else {
-            // Percentage reduction goals
-            progress = Math.min(100, (current / goal.target) * 100)
-          }
-          break
-        case "streak":
-          // For streak goals, progress is consecutive smoke-free days
-          progress = Math.min(100, (current / goal.target) * 100)
-          break
-        case "smoke_free_days":
-        case "milestone":
-        default:
-          // Standard progress calculation
-          progress = Math.min(100, (current / goal.target) * 100)
-          break
-      }
-    }
-    
-    return {
-      current,
-      target: goal.target,
-      progress: Math.round(progress),
-    }
-  }
-
-  const contextValue: DataContextType = {
-    entries,
-    goals,
-    addEntry,
-    removeEntry,
-    addGoal,
-    updateGoal,
-    removeGoal,
-    getEntriesByDate,
-    getWeeklySummary,
-    getMonthlyTrend,
-    getGoalProgress,
-    getActiveGoals,
-    getCompletedGoals,
-    updateGoalProgress,
-    completeGoal,
-  }
-
-  // 주기적으로 캐시 정리
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (store.cleanExpiredCache) {
-        store.cleanExpiredCache()
-      }
-    }, 5 * 60 * 1000) // Clean every 5 minutes
-
-    return () => clearInterval(interval)
-  }, [store])
-
-  return (
-    <DataContext.Provider value={contextValue}>
-      {children}
-    </DataContext.Provider>
-  );
+    const current = goalValue(goal, entries);
+    const daily = goal.type === 'reduction' && (goal.reductionMode === 'daily_limit' || (!goal.reductionMode && goal.target <= 10));
+    const progress = daily ? (current <= goal.target ? 100 : Math.max(0, 100 - ((current - goal.target) / goal.target) * 100)) : Math.min(100, current / goal.target * 100);
+    return { current, target: goal.target, progress: Math.round(progress) };
+  };
+  return <DataContext.Provider value={{ entries, goals, isLoading: isLoading || authLoading, error, syncStatus, retrySync, addEntry, removeEntry, addGoal, updateGoal, removeGoal,
+    getEntriesByDate: date => entries.filter(e => localDay(new Date(e.date)) === localDay(date)),
+    getWeeklySummary: () => weeklySummary(entries), getMonthlyTrend: () => monthlyTrend(entries), getGoalProgress,
+    getActiveGoals: () => goals.filter(g => g.status === 'active'), getCompletedGoals: () => goals.filter(g => g.status === 'completed'),
+    updateGoalProgress: async (id, progress) => { await updateGoal(id, { currentValue: progress }); },
+    completeGoal: async id => { await updateGoal(id, { status: 'completed', completedAt: new Date().toISOString() }); },
+  }}>{children}</DataContext.Provider>;
 };
-export const useData = () => {
-  const context = useContext(DataContext)
-  if (context === undefined) {
-    throw new Error("useData must be used within a DataProvider")
-  }
-  return context
-}
+export const useData = () => { const context = useContext(DataContext); if (!context) throw new Error('useData must be used within a DataProvider'); return context; };

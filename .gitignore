@@ -4,6 +4,10 @@ node_modules/
 # expo
 .expo/
 dist/
+dist-local/
+dist-native-android/
+dist-native-ios/
+dist-verify/
 web-build/
 expo-env.d.ts
 
@@ -33,3 +37,4 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
+audit-report.json

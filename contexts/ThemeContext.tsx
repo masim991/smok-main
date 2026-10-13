@@ -56,6 +56,7 @@ interface ThemeColors {
   background: string;
   surface: string;
   primary: string;
+  onPrimary: string;
   secondary: string;
   text: string;
   textSecondary: string;
@@ -71,7 +72,8 @@ interface ThemeColors {
 const lightTheme: ThemeColors = {
   background: '#FFFFFF',
   surface: '#F8FAFC',
-  primary: '#3B82F6',
+  primary: '#2563EB',
+  onPrimary: '#FFFFFF',
   secondary: '#64748B',
   text: '#1E293B',
   textSecondary: '#64748B',
@@ -80,14 +82,15 @@ const lightTheme: ThemeColors = {
   warning: '#F59E0B',
   error: '#EF4444',
   tabBarBackground: '#FFFFFF',
-  tabBarActive: '#3B82F6',
-  tabBarInactive: '#94A3B8',
+  tabBarActive: '#2563EB',
+  tabBarInactive: '#64748B',
 };
 
 const darkTheme: ThemeColors = {
   background: '#0F172A',
   surface: '#1E293B',
   primary: '#60A5FA',
+  onPrimary: '#0F172A',
   secondary: '#94A3B8',
   text: '#F1F5F9',
   textSecondary: '#94A3B8',
@@ -104,6 +107,7 @@ const redMeanTheme: ThemeColors = {
   background: '#1A0000',
   surface: '#450A0A',
   primary: '#FF0000',
+  onPrimary: '#FFFFFF',
   secondary: '#DC2626',
   text: '#FFFFFF',
   textSecondary: '#FFAAAA',
@@ -148,18 +152,20 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   useEffect(() => {
     const loadThemeAndGoal = async () => {
       try {
-        const [savedTheme, savedGoal] = await Promise.all([
+        const [savedTheme, savedGoal, unlocked] = await Promise.all([
           AsyncStorage.getItem('@theme'),
-          AsyncStorage.getItem('@trackingGoal')
+          AsyncStorage.getItem('@trackingGoal'),
+          AsyncStorage.getItem('@redMeanUnlocked')
         ]);
 
-        if (savedTheme) {
+        setIsRedMeanUnlocked(unlocked === 'true');
+        if (savedTheme === 'light' || savedTheme === 'dark' || (savedTheme === 'redMean' && unlocked === 'true')) {
           setThemeState(savedTheme as ThemeMode);
         }
 
         if (savedGoal) {
           const parsedGoal = JSON.parse(savedGoal);
-          setTrackingGoalState(parsedGoal);
+          setTrackingGoalState(TRACKING_GOALS.find(g => g.id === parsedGoal?.id) ?? TRACKING_GOALS[0]);
         } else {
           // Set default goal if none is selected
           setTrackingGoalState(TRACKING_GOALS[0]);

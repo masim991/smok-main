@@ -1,0 +1,12 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "SMOK 로컬 모바일 개발", "type": "shell", "command": "npm run dev:local", "isBackground": true, "problemMatcher": [] },
+    { "label": "SMOK 로컬 테스트 빌드", "type": "shell", "command": "npm run build:local", "problemMatcher": [] },
+    { "label": "SMOK 로컬 웹 테스트 서버", "type": "shell", "command": "npm run serve:local", "isBackground": true, "problemMatcher": [] },
+    { "label": "SMOK 품질 검사", "dependsOn": ["SMOK 타입 검사", "SMOK 회귀 테스트", "SMOK 코드 검사"], "dependsOrder": "sequence", "problemMatcher": [] },
+    { "label": "SMOK 타입 검사", "type": "shell", "command": "npm run typecheck", "problemMatcher": ["$tsc"] },
+    { "label": "SMOK 회귀 테스트", "type": "shell", "command": "npm test", "problemMatcher": [] },
+    { "label": "SMOK 코드 검사", "type": "shell", "command": "npm run lint", "problemMatcher": [] }
+  ]
+}

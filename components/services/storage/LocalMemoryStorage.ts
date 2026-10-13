@@ -1,5 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { IStorage } from './Storage';
+import { IStorage, AsyncStorageProvider } from './Storage';
 
 interface CacheEntry {
   data: string;
@@ -11,7 +10,7 @@ export class LocalMemoryStorage implements IStorage {
   private cache: Map<string, CacheEntry> = new Map();
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes default cache
   
-  constructor(private fallbackStorage: IStorage = new (require('./Storage').AsyncStorageProvider)()) {}
+  constructor(private fallbackStorage: IStorage = new AsyncStorageProvider()) {}
 
   async getItem(key: string): Promise<string | null> {
     // Check memory cache first
@@ -35,13 +34,14 @@ export class LocalMemoryStorage implements IStorage {
       return value;
     } catch (error) {
       console.error(`Error getting item ${key}:`, error);
-      return null;
+      throw error;
     }
   }
 
   async setItem(key: string, value: string): Promise<void> {
     try {
-      // Update memory cache immediately
+      // Cache only durable writes. A failed write must not appear successful on the next read.
+      await this.fallbackStorage.setItem(key, value);
       this.cache.set(key, {
         data: value,
         timestamp: Date.now(),
@@ -49,7 +49,6 @@ export class LocalMemoryStorage implements IStorage {
       });
 
       // Persist to storage
-      await this.fallbackStorage.setItem(key, value);
       console.log(`Cached and persisted key: ${key}`);
     } catch (error) {
       console.error(`Error setting item ${key}:`, error);
@@ -57,7 +56,7 @@ export class LocalMemoryStorage implements IStorage {
     }
   }
 
-  async multiGet(keys: string[]): Promise<ReadonlyArray<[string, string | null]>> {
+  async multiGet(keys: string[]): Promise<readonly [string, string | null][]> {
     const results: [string, string | null][] = [];
     const uncachedKeys: string[] = [];
 
@@ -95,6 +94,7 @@ export class LocalMemoryStorage implements IStorage {
         }
       } catch (error) {
         console.error('Error in multiGet:', error);
+        throw error;
       }
     }
 

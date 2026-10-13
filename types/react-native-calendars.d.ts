@@ -1,6 +1,6 @@
 declare module 'react-native-calendars' {
+  export const LocaleConfig: { defaultLocale: string; locales: Record<string, { monthNames: string[]; monthNamesShort: string[]; dayNames: string[]; dayNamesShort: string[]; today: string }> };
   import * as React from 'react';
-  import { ViewStyle, TextStyle } from 'react-native';
 
   export interface DateObject {
     dateString: string; // e.g. '2025-09-09'

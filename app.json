@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "bolt-expo-nativewind",
+    "name": "SMOK",
     "slug": "bolt-expo-nativewind",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -15,7 +15,6 @@
         "NSUserNotificationUsageDescription": "This app uses notifications to remind you of your goals and provide encouragement messages.",
         "NSLocationWhenInUseUsageDescription": "We use your location to show nearby designated smoking areas on the map.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Background location is used to monitor zones and dwell time to provide helpful notifications.",
-        "NSMicrophoneUsageDescription": "The microphone is used to detect characteristic lighter or inhalation sounds to help prevent smoking (optional).",
         "UIBackgroundModes": [
           "location"
         ],
@@ -32,7 +31,15 @@
       "expo-font",
       "expo-web-browser",
       "expo-notifications",
-      "expo-location"
+      [
+        "expo-location",
+        {
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "isIosBackgroundLocationEnabled": true,
+          "locationAlwaysAndWhenInUsePermission": "체류 알림을 켠 경우에만 위치를 사용합니다. 앱이 백그라운드에 있어도 선택한 장소의 체류 시간을 확인합니다."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -44,9 +51,15 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
-        "android.permission.ACCESS_COARSE_LOCATION",
-        "android.permission.ACCESS_FINE_LOCATION",
-        "RECORD_AUDIO"
+        "FOREGROUND_SERVICE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "extra": {

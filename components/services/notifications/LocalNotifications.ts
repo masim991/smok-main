@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import i18n from '@/i18n';
+import { Platform } from 'react-native';
 
 // Configure notification behavior for local notifications only
 Notifications.setNotificationHandler({
@@ -31,32 +32,37 @@ export class LocalNotificationService {
   // Schedule daily notifications at specific times (HH:MM)
   async scheduleSmartReminders(times: string[], message?: string): Promise<void> {
     try {
+      if (Platform.OS === 'web') return;
+      if (!times.every(t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t))) throw new Error('알림 시간은 HH:MM 형식이어야 합니다.');
       if (!times || times.length === 0) return;
       // Cancel existing to avoid duplicates
       await this.cancelAllNotifications();
-      for (const t of times) {
+      for (const t of [...new Set(times)]) {
         const [hours, minutes] = t.split(':').map(Number);
         await Notifications.scheduleNotificationAsync({
           content: {
             title: i18n.t('notifications.reminderTitle') || 'Reminder',
             body: message || (i18n.t('notifications.encouragementTitle') as string),
             sound: 'default',
+            data: { category: 'smok-reminder' },
           },
           trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+            type: Notifications.SchedulableTriggerInputTypes.DAILY,
             hour: hours,
             minute: minutes,
-            repeats: true,
           },
         });
       }
     } catch (error) {
       console.error('Error scheduling smart reminders:', error);
+      throw error;
     }
   }
 
   async requestPermissions(): Promise<boolean> {
     try {
+      if (Platform.OS === 'web') return false;
+      if (Platform.OS === 'android') await Notifications.setNotificationChannelAsync('default', { name: '리마인더', importance: Notifications.AndroidImportance.DEFAULT });
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
       
@@ -80,6 +86,8 @@ export class LocalNotificationService {
 
   async scheduleMotivationalReminders(settings: NotificationSettings): Promise<void> {
     try {
+      if (Platform.OS === 'web') return;
+      if (!Number.isInteger(settings.remindersPerDay) || settings.remindersPerDay < 0 || settings.remindersPerDay > 12 || !/^([01]\d|2[0-3]):[0-5]\d$/.test(settings.reminderTime)) throw new Error('알림 시간과 횟수를 확인해주세요.');
       // Cancel existing notifications
       await this.cancelAllNotifications();
       
@@ -102,12 +110,12 @@ export class LocalNotificationService {
             title: i18n.t('notifications.reminderTitle'),
             body: message,
             sound: 'default',
+            data: { category: 'smok-reminder' },
           },
           trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+            type: Notifications.SchedulableTriggerInputTypes.DAILY,
             hour: reminderHour,
             minute: minutes,
-            repeats: true,
           },
         });
       }
@@ -119,6 +127,7 @@ export class LocalNotificationService {
 
   async scheduleGoalReminder(goalTitle: string, message: string): Promise<void> {
     try {
+      if (Platform.OS === 'web') return;
       await Notifications.scheduleNotificationAsync({
         content: {
           title: `${i18n.t('notifications.goalTitlePrefix')}${goalTitle}`,
@@ -138,6 +147,8 @@ export class LocalNotificationService {
 
   async scheduleEncouragementNotification(message: string, delayMinutes: number = 30): Promise<void> {
     try {
+      if (Platform.OS === 'web') return;
+      if (!Number.isFinite(delayMinutes) || delayMinutes <= 0) throw new Error('알림 지연 시간을 확인해주세요.');
       await Notifications.scheduleNotificationAsync({
         content: {
           title: i18n.t('notifications.encouragementTitle'),
@@ -157,9 +168,14 @@ export class LocalNotificationService {
 
   async cancelAllNotifications(): Promise<void> {
     try {
-      await Notifications.cancelAllScheduledNotificationsAsync();
+      if (Platform.OS === 'web') return;
+      const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+      for (const notification of scheduled) {
+        if (notification.content.data?.category === 'smok-reminder') await Notifications.cancelScheduledNotificationAsync(notification.identifier);
+      }
     } catch (error) {
       console.error('Error canceling notifications:', error);
+      throw error;
     }
   }
 

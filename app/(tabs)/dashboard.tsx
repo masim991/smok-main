@@ -1,24 +1,25 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, TextInput } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
-import MapView, { Marker, Circle, MapPressEvent } from 'react-native-maps';
+import StayMap from '@/components/StayMap';
 import * as Location from 'expo-location';
 import { useLocationStay } from '@/contexts/LocationStayContext';
+import { useData } from '@/components/contexts/DataContext';
+import { localDay } from '@/utils/tracking';
+import { Link } from 'expo-router';
+import { ScreenHeader } from '@/components/ui/ScreenHeader';
 
 export default function Dashboard() {
-  const { colors, theme } = useTheme();
-  const { signOut, user } = useAuth();
-  const { t } = useTranslation();
+  const { colors } = useTheme();
+  const { user } = useAuth();
+  const { t, i18n } = useTranslation();
+  const ko = i18n.language.startsWith('ko');
+  const { entries, getActiveGoals } = useData();
+  const todayCount = entries.filter(e => localDay(new Date(e.date)) === localDay(new Date())).reduce((sum, e) => sum + e.count, 0);
   const { settings: staySettings, setSettings: setStaySettings, enabled: stayEnabled, toggleEnabled, setFromCurrentLocation, runtime } = useLocationStay();
-  const mapRef = useRef<MapView | null>(null);
-
-  useEffect(() => {
-    if (staySettings.latitude == null || staySettings.longitude == null) {
-      setFromCurrentLocation();
-    }
-  }, [staySettings.latitude, staySettings.longitude, setFromCurrentLocation]);
+  const mapRef = useRef<any>(null);
 
   const handleSetFromCurrentLocation = async () => {
     await setFromCurrentLocation();
@@ -66,12 +67,18 @@ export default function Dashboard() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{t('dashboardStay.screenTitle')}</Text>
-        <Text style={styles.subtitle}>{user?.nickname || user?.email || 'Guest'}</Text>
-      </View>
+      <ScreenHeader title={ko ? '오늘의 기록' : 'Today'} subtitle={user?.nickname || user?.email || 'SMOK'} />
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
         <View style={styles.content}>
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>{ko ? '작은 기록부터 시작해요' : 'Start with a small record'}</Text>
+            <View style={{ flexDirection: 'row', gap: 24, marginVertical: 16 }}>
+              <View style={{ flex: 1 }}><Text style={{ color: colors.text, fontSize: 36, fontWeight: '800' }}>{todayCount}</Text><Text style={styles.label}>{ko ? '오늘 기록한 개비' : 'Cigarettes recorded today'}</Text></View>
+              <View style={{ flex: 1 }}><Text style={{ color: colors.text, fontSize: 36, fontWeight: '800' }}>{getActiveGoals().length}</Text><Text style={styles.label}>{ko ? '진행 중인 목표' : 'Active goals'}</Text></View>
+            </View>
+            <Text style={{ color: colors.textSecondary, lineHeight: 22 }}>{ko ? '기록이 없는 날이 금연한 날을 뜻하지는 않습니다. 오늘의 상황을 함께 기록해보세요.' : 'A day without records does not confirm a smoke-free day. Add the context of your day.'}</Text>
+            <Link href="/(tabs)" asChild><TouchableOpacity accessibilityRole="button" style={{ backgroundColor: colors.primary, padding: 16, borderRadius: 12, marginTop: 20, alignItems: 'center' }}><Text style={{ color: colors.onPrimary, fontWeight: '700' }}>{ko ? '흡연 기록하기' : 'Record smoking'}</Text></TouchableOpacity></Link>
+          </View>
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>{t('dashboardStay.sectionTitle')}</Text>
             <View style={styles.rowBetween}>
@@ -99,39 +106,7 @@ export default function Dashboard() {
               </TouchableOpacity>
             </View>
             <View style={styles.map}>
-              <MapView
-                style={{ flex: 1 }}
-                ref={mapRef}
-                initialRegion={{
-                  latitude: staySettings.latitude ?? 37.5665,
-                  longitude: staySettings.longitude ?? 126.978,
-                  latitudeDelta: 0.01,
-                  longitudeDelta: 0.01,
-                }}
-                onPress={(e: MapPressEvent) => {
-                  const { latitude, longitude } = e.nativeEvent.coordinate;
-                  setStaySettings({ latitude, longitude });
-                }}
-              >
-                {staySettings.latitude != null && staySettings.longitude != null && (
-                  <>
-                    <Marker
-                      coordinate={{ latitude: staySettings.latitude, longitude: staySettings.longitude }}
-                      draggable
-                      onDragEnd={(e) => {
-                        const { latitude, longitude } = e.nativeEvent.coordinate;
-                        setStaySettings({ latitude, longitude });
-                      }}
-                    />
-                    <Circle
-                      center={{ latitude: staySettings.latitude, longitude: staySettings.longitude }}
-                      radius={staySettings.radius}
-                      strokeColor={colors.primary}
-                      fillColor={theme === 'redMean' ? 'rgba(255,0,0,0.1)' : 'rgba(0,122,255,0.1)'}
-                    />
-                  </>
-                )}
-              </MapView>
+              <StayMap ref={mapRef} latitude={staySettings.latitude} longitude={staySettings.longitude} radius={staySettings.radius} color={colors.primary} onSelect={(latitude: number, longitude: number) => setStaySettings({ latitude, longitude })} />
             </View>
             <View style={{ marginTop: 12 }}>
               <Text style={{ color: colors.textSecondary }}>

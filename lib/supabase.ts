@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { localTestMode } from './localTest';
 
 const getExtra = (): any => {
   const ec = (Constants as any)?.expoConfig?.extra;
@@ -10,20 +11,23 @@ const getExtra = (): any => {
 };
 
 const extra = getExtra();
-const supabaseUrl: string = extra.supabaseUrl || (process.env as any)?.EXPO_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey: string = extra.supabaseAnonKey || (process.env as any)?.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseUrl: string = process.env.EXPO_PUBLIC_SUPABASE_URL || extra.supabaseUrl;
+const supabaseAnonKey: string = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || extra.supabaseAnonKey;
+export const isSupabaseConfigured = !!supabaseUrl && /^https:\/\//.test(supabaseUrl) && !!supabaseAnonKey;
 
 if (!supabaseUrl || !supabaseAnonKey) {
   // Avoid throwing at import time; log to help diagnose missing config
   console.warn('[Supabase] Missing supabaseUrl or supabaseAnonKey in app.json extra');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient(isSupabaseConfigured ? supabaseUrl : 'https://unconfigured.invalid', supabaseAnonKey || 'unconfigured', {
+  global: localTestMode ? { fetch: async () => { throw new Error('서버 요청은 로컬 테스트 모드에서 비활성화됩니다.'); } } : undefined,
   auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    storage: AsyncStorage as any,
-    storageKey: '@SmokeTracker:supabase-auth',
+    persistSession: !localTestMode,
+    autoRefreshToken: !localTestMode,
+    storage: AsyncStorage,
+    detectSessionInUrl: false,
+    storageKey: localTestMode ? '@SmokeTracker:local-test-auth' : '@SmokeTracker:supabase-auth',
   },
 });
 

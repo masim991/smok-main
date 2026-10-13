@@ -5,10 +5,18 @@
     "history": "Stats",
     "settings": "Settings",
     "map": "Smoking zones",
-    "dashboard": "Dwell alert"
+    "dashboard": "Home"
   },
   "labels": {
-    "daysShort": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    "daysShort": [
+      "Sun",
+      "Mon",
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat"
+    ]
   },
   "common": {
     "error": "Error",
@@ -394,9 +402,9 @@
       "permissionBody": "Please allow background location in system settings to enable this feature."
     },
     "geofence": {
-      "title": "Geofence auto count",
-      "enable": "Auto-count when dwelling in smoking zone",
-      "desc": "If you stay inside a saved smoking zone for the configured time, you'll receive a warning and one cigarette will be auto-counted.",
+      "title": "Record confirmation after a stay",
+      "enable": "Show a manual recording prompt",
+      "desc": "Location cannot confirm smoking. A stay can prompt manual recording; no smoking entry is created automatically.",
       "dwellTitle": "Smoking zone dwell settings",
       "dwell": {
         "minutesLabel": "Dwell time (minutes)",

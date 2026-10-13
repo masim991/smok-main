@@ -10,18 +10,28 @@ import { SettingsProvider } from '@/contexts/SettingsContext';
 import { DataProvider } from '@/components/contexts/DataContext';
 import '@/i18n';
 import * as Notifications from 'expo-notifications';
+import { AppState, Platform } from 'react-native';
+import { supabase } from '@/lib/supabase';
+import { localTestMode } from '@/lib/localTest';
+import { AppAlerts } from '@/components/ui/AppAlerts';
 import { LocationStayProvider } from '@/contexts/LocationStayContext';
 
 export default function RootLayout() {
   useFrameworkReady();
   useEffect(() => {
+    if (Platform.OS === 'web' || localTestMode) return;
+    const refresh = (state: string) => state === 'active' ? supabase.auth.startAutoRefresh() : supabase.auth.stopAutoRefresh();
+    refresh(AppState.currentState);
+    const subscription = AppState.addEventListener('change', refresh);
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
-        shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
         shouldPlaySound: false,
         shouldSetBadge: false,
-      } as any),
+      }),
     });
+    return () => { subscription.remove(); supabase.auth.stopAutoRefresh(); };
   }, []);
 
   return (
@@ -36,6 +46,7 @@ export default function RootLayout() {
                 <Stack.Screen name="+not-found" />
               </Stack>
               <StatusBar style="auto" />
+              <AppAlerts />
             </LocationStayProvider>
           </DataProvider>
         </SettingsProvider>

@@ -1,17 +1,24 @@
-import { Tabs } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
+import { useAuth } from '@/contexts/AuthContext';
+import { ActivityIndicator, View, useColorScheme } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { Calendar, Target, ChartBar as BarChart3, Settings, Home } from 'lucide-react-native';
-import { useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { DataStatus } from '@/components/ui/DataStatus';
 
 export default function TabLayout() {
   const { colors } = useTheme();
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
+  const { loading, isAuthenticated } = useAuth();
+  if (loading) return <View style={{ flex: 1, justifyContent: 'center' }}><ActivityIndicator /></View>;
+  if (!isAuthenticated) return <Redirect href="/auth/login" />;
 
   return (
+    <View style={{ flex: 1, backgroundColor: colors.background, paddingTop: insets.top }}>
+    <DataStatus />
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -19,9 +26,9 @@ export default function TabLayout() {
           backgroundColor: colors.tabBarBackground,
           borderTopWidth: 1,
           borderTopColor: colors.border,
-          height: 60 + insets.bottom, // adapt to safe area
+          height: 76 + insets.bottom,
           paddingBottom: insets.bottom,
-          paddingTop: 8,
+          paddingTop: 6,
           elevation: 10,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -2 },
@@ -29,9 +36,9 @@ export default function TabLayout() {
           shadowRadius: 4,
         },
         tabBarItemStyle: {
-          marginVertical: 4,
+          marginVertical: 0,
           marginHorizontal: 0,
-          paddingVertical: 4,
+          paddingVertical: 2,
           borderRadius: 0,
         },
         tabBarActiveBackgroundColor:
@@ -97,11 +104,12 @@ export default function TabLayout() {
         name="settings"
         options={{
           title: t('tabs.settings'),
-          tabBarIcon: ({ focused, size, color }: { focused: boolean; size: number; color: string }) => (
+          tabBarIcon: ({ size, color }: { size: number; color: string }) => (
             <Settings size={size} color={color} />
           ),
         }}
       />
     </Tabs>
+    </View>
   );
 }

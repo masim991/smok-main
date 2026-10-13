@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 export interface IStorage {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
-  multiGet(keys: string[]): Promise<ReadonlyArray<[string, string | null]>>;
+  multiGet(keys: string[]): Promise<readonly [string, string | null][]>;
   // Optional methods for enhanced storage implementations
   preloadData?(keys: string[]): Promise<void>;
   cleanExpiredCache?(): void;
@@ -17,7 +17,7 @@ export class AsyncStorageProvider implements IStorage {
   async setItem(key: string, value: string): Promise<void> {
     return AsyncStorage.setItem(key, value);
   }
-  async multiGet(keys: string[]): Promise<ReadonlyArray<[string, string | null]>> {
+  async multiGet(keys: string[]): Promise<readonly [string, string | null][]> {
     const pairs = await AsyncStorage.multiGet(keys);
     // Ensure a readonly tuple array shape compatible with our interface
     return pairs.map(([k, v]) => [k, v] as [string, string | null]);

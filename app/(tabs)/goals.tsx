@@ -1,27 +1,26 @@
-import { useState, useEffect } from 'react';
+import { appAlert } from '@/utils/alerts';
+import { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Alert,
   Animated,
+  Modal,
+  AccessibilityInfo,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { localDateKey } from '@/components/ui/localDate';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useData } from '@/components/contexts/DataContext';
 import type { Goal, GoalType } from '@/components/contexts/DataContext';
 import { useTranslation } from 'react-i18next';
 import {
   Check,
-  Trophy,
-  TrendingDown,
-  Calendar as CalendarIcon,
   Plus,
   X,
   CheckCircle,
-  Target,
-  Flame
 } from 'lucide-react-native';
 
 interface GoalTemplate {
@@ -129,69 +128,50 @@ const GOAL_TEMPLATES: GoalTemplate[] = [
 
 function GoalsTab() {
   const { colors, theme } = useTheme();
-  const { goals, addGoal, completeGoal, entries } = useData();
-  const { t } = useTranslation();
+  const { goals, addGoal, completeGoal, entries, getGoalProgress } = useData();
+  const { t, i18n } = useTranslation();
+  const insets = useSafeAreaInsets();
+  const ko = i18n.language.startsWith('ko');
+  const label = (k: string, en: string) => ko ? k : en;
   const [isLoading, setIsLoading] = useState(false);
+  const adding = useRef(false);
   const [showGoalSelection, setShowGoalSelection] = useState(false);
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
   const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
   const [pulseAnim] = useState(new Animated.Value(1));
 
-  // Pulse animation for red theme
+  // Respect reduced motion and stop animations when navigating away.
   useEffect(() => {
-    if (theme === 'redMean') {
-      const pulse = () => {
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.05,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ]).start(() => pulse());
-      };
-      pulse();
-    }
+    let disposed = false;
+    let animation: Animated.CompositeAnimation | undefined;
+    const stop = () => { animation?.stop(); pulseAnim.setValue(1); };
+    const configure = (reduce: boolean) => {
+      stop();
+      if (disposed || reduce || theme !== 'redMean') return;
+      animation = Animated.loop(Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.02, duration: 1400, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1400, useNativeDriver: true }),
+      ]));
+      animation.start();
+    };
+    AccessibilityInfo.isReduceMotionEnabled().then(configure).catch(() => stop());
+    const listener = AccessibilityInfo.addEventListener('reduceMotionChanged', configure);
+    return () => { disposed = true; listener.remove(); stop(); };
   }, [theme, pulseAnim]);
 
   const activeGoals = goals.filter((g: Goal) => g.status === 'active');
   const completedGoals = goals.filter((g: Goal) => g.status === 'completed');
 
   // Always show all templates for now - we'll filter later if needed
-  const availableTemplates = GOAL_TEMPLATES;
+  const availableTemplates = GOAL_TEMPLATES.filter(template => ['daily_limit_3', 'daily_limit_1', 'week_streak', 'month_champion'].includes(template.id));
 
-  const calculateGoalProgress = (goal: Goal): number => {
-    const today = new Date().toISOString().split('T')[0];
-    const todayEntries = entries.filter(e => e.date.startsWith(today));
-    const todayCount = todayEntries.reduce((sum, e) => sum + e.count, 0);
-
-    switch (goal.type) {
-      case 'reduction':
-        if (goal.target <= 10) { // Daily limit goals
-          return Math.max(0, 100 - (todayCount / goal.target) * 100);
-        } else { // Percentage reduction goals
-          return Math.min(100, (goal.currentValue / goal.target) * 100);
-        }
-      case 'streak':
-        return Math.min(100, (goal.currentValue / goal.target) * 100);
-      case 'smoke_free_days':
-        return Math.min(100, (goal.currentValue / goal.target) * 100);
-      case 'milestone':
-        return goal.currentValue >= goal.target ? 100 : 0;
-      default:
-        return 0;
-    }
-  };
+  const calculateGoalProgress = (goal: Goal): number => getGoalProgress(goal).progress;
 
   const getMotivationalMessage = () => {
     const activeCount = activeGoals.length;
     const completedCount = completedGoals.length;
-    const today = new Date().toISOString().split('T')[0];
-    const todayEntries = entries.filter(e => e.date.startsWith(today));
+    const today = localDateKey();
+    const todayEntries = entries.filter(e => localDateKey(e.date) === today);
     const todayCount = todayEntries.reduce((sum, e) => sum + e.count, 0);
 
     if (theme === 'redMean') {
@@ -229,6 +209,8 @@ function GoalsTab() {
   };
 
   const addSelectedGoals = async () => {
+    if (adding.current || selectedTemplates.length === 0) return;
+    adding.current = true;
     setIsLoading(true);
     try {
       for (const templateId of selectedTemplates) {
@@ -236,24 +218,22 @@ function GoalsTab() {
         if (template) {
           const newGoal = {
             type: template.type,
+            ...(template.type === 'reduction' ? { reductionMode: 'daily_limit' as const } : {}),
             target: template.target,
-            title: theme === 'redMean' 
-              ? t(`goals.templates.${template.id}.redMeanTitle`)
-              : t(`goals.templates.${template.id}.title`),
-            description: theme === 'redMean' 
-              ? t(`goals.templates.${template.id}.redMeanDescription`)
-              : t(`goals.templates.${template.id}.description`),
+            title: t(`goals.templates.${template.id}.title`),
+            description: t(`goals.templates.${template.id}.description`),
             currentValue: 0,
             difficulty: template.difficulty,
             icon: template.icon,
-            redMeanTitle: template.redMeanTitle,
-            redMeanDescription: template.redMeanDescription,
+            redMeanTitle: t(`goals.templates.${template.id}.title`),
+            redMeanDescription: t(`goals.templates.${template.id}.description`),
           };
           await addGoal(newGoal);
+          setSelectedTemplates(previous => previous.filter(id => id !== templateId));
         }
       }
       setShowGoalSelection(false);
-      Alert.alert(
+      appAlert(
         theme === 'redMean' ? t('goals.alerts.activatedTitleRed') : t('goals.alerts.successTitle'),
         theme === 'redMean'
           ? t('goals.alerts.activatedBodyRed', { count: selectedTemplates.length })
@@ -261,11 +241,12 @@ function GoalsTab() {
       );
     } catch (error) {
       console.error(error);
-      Alert.alert(
+      appAlert(
         theme === 'redMean' ? t('goals.alerts.failedTitleRed') : t('common.error'),
         theme === 'redMean' ? t('goals.alerts.failedBodyRed') : t('goals.alerts.failedBody')
       );
     } finally {
+      adding.current = false;
       setIsLoading(false);
     }
   };
@@ -280,16 +261,6 @@ function GoalsTab() {
     };
 
     return baseColors[difficulty as keyof typeof baseColors] || colors.primary;
-  };
-
-  const getGoalIcon = (type: GoalType) => {
-    switch (type) {
-      case 'reduction': return TrendingDown;
-      case 'smoke_free_days': return CalendarIcon;
-      case 'streak': return Flame;
-      case 'milestone': return Trophy;
-      default: return Target;
-    }
   };
 
   const renderGoalCard = (goal: Goal) => {
@@ -343,7 +314,7 @@ function GoalsTab() {
                   styles.difficultyText,
                   { color: getDifficultyColor(goal.difficulty) }
                 ]}>
-                  {goal.difficulty.toUpperCase()}
+                  {ko ? ({ easy: '쉬움', medium: '보통', hard: '어려움', extreme: '도전' }[goal.difficulty]) : goal.difficulty.toUpperCase()}
                 </Text>
               </View>
               {goal.status === 'active' && (
@@ -354,7 +325,13 @@ function GoalsTab() {
             </View>
           </View>
           <TouchableOpacity
-            onPress={() => completeGoal(goal.id)}
+            accessibilityRole="button"
+            accessibilityLabel={label('목표 완료', 'Complete goal')}
+            accessibilityState={{ disabled: goal.status === 'completed' || progress < 100 }}
+            onPress={async () => {
+              try { await completeGoal(goal.id); }
+              catch { appAlert(t('common.error'), label('목표를 완료하지 못했습니다. 다시 시도해주세요.', 'Could not complete the goal. Please try again.')); }
+            }}
             style={[
               styles.completeButton,
               {
@@ -363,12 +340,12 @@ function GoalsTab() {
                 borderWidth: 2,
               }
             ]}
-            disabled={goal.status === 'completed'}
+            disabled={goal.status === 'completed' || progress < 100}
           >
             {goal.status === 'completed' ? (
               <CheckCircle size={20} color={colors.primary} />
             ) : (
-              <Check size={20} color={isRedTheme ? colors.background : '#fff'} />
+              <Check size={20} color={colors.onPrimary} />
             )}
           </TouchableOpacity>
         </View>
@@ -376,7 +353,7 @@ function GoalsTab() {
         <View style={{ marginTop: 16 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
             <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-              Progress: {goal.currentValue} / {goal.target}
+              {label('진행', 'Progress')}: {getGoalProgress(goal).current} / {goal.target}
             </Text>
             <Text style={{
               color: progress >= 100 ? colors.success : colors.primary,
@@ -449,7 +426,8 @@ function GoalsTab() {
                   borderColor: theme === 'redMean' ? colors.text : 'transparent'
                 }
               ]}
-              onPress={openGoalSelection}
+              accessibilityRole="button" accessibilityLabel={label('목표 추가', 'Add goal')}
+            onPress={openGoalSelection}
             >
               <Plus size={20} color={theme === 'redMean' ? colors.background : "#fff"} />
               <Text style={[
@@ -486,6 +464,7 @@ function GoalsTab() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[
         styles.header,
+        { paddingTop: insets.top + 24 },
         {
           backgroundColor: colors.surface,
           borderBottomWidth: theme === 'redMean' ? 2 : 0,
@@ -512,14 +491,15 @@ function GoalsTab() {
             ]}
             onPress={openGoalSelection}
           >
-            <Plus size={20} color={theme === 'redMean' ? colors.background : '#fff'} />
+            <Plus size={20} color={colors.onPrimary} />
           </TouchableOpacity>
         </View>
 
       </View>
 
       {/* Enhanced Goal Selection */}
-      {showGoalSelection && (
+      <Modal visible={showGoalSelection} transparent animationType="slide" onRequestClose={() => { if (!isLoading) setShowGoalSelection(false); }}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 16, paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }}>
         <View
           style={[
             styles.goalSelectionContainer,
@@ -537,6 +517,7 @@ function GoalsTab() {
               {theme === 'redMean' ? t('goals.select.titleRed') : t('goals.select.title')}
             </Text>
             <TouchableOpacity
+              accessibilityRole="button" accessibilityLabel={label('닫기', 'Close')} disabled={isLoading}
               onPress={() => setShowGoalSelection(false)}
               style={[styles.closeButton, { backgroundColor: colors.border }]}
             >
@@ -556,11 +537,13 @@ function GoalsTab() {
             contentContainerStyle={{ paddingBottom: 16 }}
           >
             <View style={styles.goalGrid}>
-              {GOAL_TEMPLATES.map((template) => {
+              {availableTemplates.map((template) => {
                 const isSelected = selectedTemplates.includes(template.id);
                 return (
                   <TouchableOpacity
                     key={template.id}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: isSelected }}
                     style={[
                       styles.goalOptionCard,
                       {
@@ -595,17 +578,17 @@ function GoalsTab() {
                           styles.difficultyText,
                           { color: getDifficultyColor(template.difficulty) }
                         ]}>
-                          {template.difficulty.toUpperCase()}
+                          {ko ? ({ easy: '쉬움', medium: '보통', hard: '어려움', extreme: '도전' }[template.difficulty]) : template.difficulty.toUpperCase()}
                         </Text>
                       </View>
                     </View>
 
-                    <Text style={[styles.goalCardTitle, { color: colors.text }]}> 
-                      {t(`goals.templates.${template.id}.${theme === 'redMean' ? 'redMeanTitle' : 'title'}`)}
+                    <Text style={[styles.goalCardTitle, { color: colors.text }]}>
+                      {t(`goals.templates.${template.id}.title`)}
                     </Text>
 
-                    <Text style={[styles.goalCardDescription, { color: colors.textSecondary }]}> 
-                      {t(`goals.templates.${template.id}.${theme === 'redMean' ? 'redMeanDescription' : 'description'}`)}
+                    <Text style={[styles.goalCardDescription, { color: colors.textSecondary }]}>
+                      {t(`goals.templates.${template.id}.description`)}
                     </Text>
 
                     <View style={styles.goalCardFooter}>
@@ -663,7 +646,7 @@ function GoalsTab() {
                   style={[
                     styles.activateButtonText,
                     {
-                      color: theme === 'redMean' ? colors.background : '#fff',
+                      color: colors.onPrimary,
                       fontSize: theme === 'redMean' ? 10 : 14,
                       textAlign: 'center',
                       lineHeight: theme === 'redMean' ? 12 : 16,
@@ -672,9 +655,9 @@ function GoalsTab() {
                   numberOfLines={theme === 'redMean' ? 3 : 2}
                   adjustsFontSizeToFit
                 >
-                  {isLoading 
+                  {isLoading
                     ? (theme === 'redMean' ? t('goals.buttons.activating') : t('goals.buttons.adding'))
-                    : (theme === 'redMean' 
+                    : (theme === 'redMean'
                         ? t('goals.buttons.activateN', { count: selectedTemplates.length })
                         : t('goals.buttons.addN', { count: selectedTemplates.length }))}
                 </Text>
@@ -682,7 +665,8 @@ function GoalsTab() {
             </View>
           )}
         </View>
-      )}
+        </View>
+      </Modal>
 
       {!showGoalSelection && (
         <ScrollView
@@ -709,7 +693,7 @@ function GoalsTab() {
               >
                 <Text style={[
                   styles.tabText,
-                  { color: activeTab === 'active' ? (theme === 'redMean' ? colors.background : '#fff') : colors.text }
+                  { color: activeTab === 'active' ? (colors.onPrimary) : colors.text }
                 ]}>
                   {theme === 'redMean' ? t('goals.tabs.activeRed') : t('goals.tabs.active')}
                 </Text>
@@ -723,7 +707,7 @@ function GoalsTab() {
               >
                 <Text style={[
                   styles.tabText,
-                  { color: activeTab === 'completed' ? (theme === 'redMean' ? colors.background : '#fff') : colors.text }
+                  { color: activeTab === 'completed' ? (colors.onPrimary) : colors.text }
                 ]}>
                   {theme === 'redMean' ? t('goals.tabs.completedRed') : t('goals.tabs.completed')}
                 </Text>
@@ -825,8 +809,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   completeButton: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1002,16 +986,15 @@ const styles = StyleSheet.create({
   },
   // Enhanced Goal Selection Styles
   goalSelectionContainer: {
-    position: 'absolute',
-    top: '20%',
-    left: 16,
-    right: 16,
+    width: '100%',
+    alignSelf: 'center',
+    maxWidth: 560,
     borderRadius: 16,
     padding: 20,
     shadowOffset: { width: 0, height: 4 },
     shadowRadius: 12,
     elevation: 8,
-    maxHeight: '65%',
+    maxHeight: '90%',
     zIndex: 1000,
   },
   goalGridScrollView: {
@@ -1036,8 +1019,8 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   closeButton: {
-    width: 32,
-    height: 32,
+    width: 44,
+    height: 44,
     borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
@@ -1049,7 +1032,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   goalOptionCard: {
-    width: '48%',
+    flexGrow: 1,
+    flexBasis: '45%',
+    minWidth: 140,
     borderRadius: 12,
     padding: 16,
     shadowOffset: { width: 0, height: 2 },

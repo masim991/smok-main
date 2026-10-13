@@ -49,7 +49,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
   const [language, setLanguageState] = useState<string>('en');
   const [smartNotificationsEnabled, setSmartNotificationsEnabledState] = useState<boolean>(false);
   const [dailyGoalTarget, setDailyGoalTargetState] = useState<number>(0);
-  const [geofenceAutoCount, setGeofenceAutoCountState] = useState<boolean>(true);
+  const [geofenceAutoCount, setGeofenceAutoCountState] = useState<boolean>(false);
   const [wearableDetectionEnabled, setWearableDetectionEnabledState] = useState<boolean>(false);
   const [audioDetectionEnabled, setAudioDetectionEnabledState] = useState<boolean>(false);
   const [stayMinutes, setStayMinutesState] = useState<number>(2);
@@ -76,16 +76,16 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
       ]);
       
       if (savedReminders) {
-        setRemindersPerDayState(parseInt(savedReminders, 10));
+        setRemindersPerDayState(Number.isFinite(Number(savedReminders)) ? Math.max(0, Math.min(10, Math.floor(Number(savedReminders)))) : 3);
       }
       if (savedNotifications) {
         setNotificationsEnabledState(savedNotifications === 'true');
       }
       if (savedTime) {
-        setNotificationTimeState(savedTime);
+        if (/^([01]\d|2[0-3]):[0-5]\d$/.test(savedTime)) setNotificationTimeState(savedTime);
       }
       const deviceLng = Localization.getLocales()[0]?.languageCode ?? 'en';
-      const lngToUse = savedLanguage || deviceLng;
+      const lngToUse = (savedLanguage || deviceLng) === 'ko' ? 'ko' : 'en';
       setLanguageState(lngToUse);
       i18n.changeLanguage(lngToUse);
 
@@ -93,19 +93,19 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
         setSmartNotificationsEnabledState(savedSmart === 'true');
       }
       if (savedDailyGoal != null && !Number.isNaN(Number(savedDailyGoal))) {
-        setDailyGoalTargetState(parseInt(savedDailyGoal, 10));
+        setDailyGoalTargetState(Math.max(0, Math.min(1000, Math.floor(Number(savedDailyGoal)))));
       }
       if (savedGeofenceAutoCount != null) {
         setGeofenceAutoCountState(savedGeofenceAutoCount === 'true');
       }
       if (savedWearableEnabled != null) {
-        setWearableDetectionEnabledState(savedWearableEnabled === 'true');
+        setWearableDetectionEnabledState(false);
       }
       if (savedAudioEnabled != null) {
-        setAudioDetectionEnabledState(savedAudioEnabled === 'true');
+        setAudioDetectionEnabledState(false);
       }
       if (savedStayMinutes && !Number.isNaN(Number(savedStayMinutes))) {
-        setStayMinutesState(Math.max(1, parseInt(savedStayMinutes, 10)));
+        setStayMinutesState(Math.max(1, Math.min(120, Math.floor(Number(savedStayMinutes)))));
       }
       if (savedStayNotifMode === 'once' || savedStayNotifMode === 'every_block') {
         setStayNotificationModeState(savedStayNotifMode);
@@ -117,7 +117,8 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
 
   const setStayMinutes = async (min: number) => {
     try {
-      const v = Math.max(1, Math.floor(min));
+      if (!Number.isFinite(min)) return;
+      const v = Math.max(1, Math.min(120, Math.floor(min)));
       setStayMinutesState(v);
       await AsyncStorage.setItem('stayMinutes', String(v));
     } catch (error) {
@@ -135,6 +136,8 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
   };
 
   const setRemindersPerDay = async (count: number) => {
+    if (!Number.isFinite(count)) return;
+    count = Math.max(0, Math.min(10, Math.floor(count)));
     try {
       setRemindersPerDayState(count);
       await AsyncStorage.setItem('remindersPerDay', count.toString());
@@ -153,6 +156,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
   };
 
   const setNotificationTime = async (time: string) => {
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return;
     try {
       setNotificationTimeState(time);
       await AsyncStorage.setItem('notificationTime', time);
@@ -162,6 +166,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
   };
 
   const setLanguage = async (lng: string) => {
+    if (lng !== 'ko' && lng !== 'en') return;
     try {
       setLanguageState(lng);
       await AsyncStorage.setItem('language', lng);
@@ -183,6 +188,8 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
 
   // Added in Step 3: daily goal target value
   const setDailyGoalTarget = async (value: number) => {
+    if (!Number.isFinite(value)) return;
+    value = Math.max(0, Math.min(1000, Math.floor(value)));
     try {
       setDailyGoalTargetState(value);
       await AsyncStorage.setItem('dailyGoalTarget', String(value));
