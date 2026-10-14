@@ -32,66 +32,11 @@ export default function SmokingZonesMap() {
   const [newDesc, setNewDesc] = useState('');
   const [clientId, setClientId] = useState<string | null>(null);
   const [selectingOnMap, setSelectingOnMap] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert(t('map.locationPermissionTitle'), t('map.locationPermissionBody'));
-          setLoading(false);
-          return;
-        }
-        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
-        const initialRegion: Region = {
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        };
-        setRegion(initialRegion);
-        setMyLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-        setLoading(false);
-        await fetchZones(initialRegion);
-        try {
-          const id = await getOrCreateClientId();
-          setClientId(id);
-        } catch {}
-        const channel = supabase.channel('zones-changes')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'smoking_zones' }, () => {
-            if (region) fetchZones(region);
-          })
-          .subscribe();
-        try {
-          await notificationService.requestPermissions();
-        } catch {}
-
-        const subscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.Highest,
-            distanceInterval: 10,
-            timeInterval: 5000,
-          },
-          (loc) => {
-            // Ignore noisy fixes to keep effective accuracy within ~5-10m
-            if (typeof loc.coords.accuracy === 'number' && loc.coords.accuracy > 10) {
-              return;
-            }
-            const current = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
-            setMyLocation(current);
-            checkZoneEntry(current);
-          }
-        );
-
-        return () => {
-          try { subscription.remove(); } catch {}
-          supabase.removeChannel(channel);
-        };
-      } catch (e) {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const latestRef = useRef<{
+    region: Region | null;
+    fetchZones: (region: Region) => Promise<void>;
+    checkZoneEntry: (position: { latitude: number; longitude: number }) => void;
+  } | null>(null);
 
   const getOrCreateClientId = async (): Promise<string> => {
     const key = 'clientId';
@@ -246,6 +191,76 @@ export default function SmokingZonesMap() {
     setRegion(r);
     fetchZones(r);
   };
+
+  latestRef.current = { region, fetchZones, checkZoneEntry };
+
+  useEffect(() => {
+    let disposed = false;
+    let locationSubscription: Location.LocationSubscription | null = null;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const start = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (disposed) return;
+        if (status !== 'granted') {
+          Alert.alert(t('map.locationPermissionTitle'), t('map.locationPermissionBody'));
+          setLoading(false);
+          return;
+        }
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+        if (disposed) return;
+        const initialRegion: Region = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        };
+        setRegion(initialRegion);
+        setMyLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        setLoading(false);
+        await latestRef.current?.fetchZones(initialRegion);
+        if (disposed) return;
+        try {
+          const id = await getOrCreateClientId();
+          if (!disposed) setClientId(id);
+        } catch (error) {
+          if (!disposed) setMapError(error instanceof Error ? error.message : String(error));
+        }
+        if (disposed) return;
+        channel = supabase.channel('zones-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'smoking_zones' }, () => {
+            const currentRegion = latestRef.current?.region;
+            if (currentRegion) void latestRef.current?.fetchZones(currentRegion);
+          })
+          .subscribe();
+        try { await notificationService.requestPermissions(); } catch {}
+        if (disposed) return;
+        const subscription = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Highest, distanceInterval: 10, timeInterval: 5000 },
+          (loc) => {
+            if (disposed || (typeof loc.coords.accuracy === 'number' && loc.coords.accuracy > 10)) return;
+            const current = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+            setMyLocation(current);
+            latestRef.current?.checkZoneEntry(current);
+          }
+        );
+        if (disposed) subscription.remove();
+        else locationSubscription = subscription;
+      } catch (error) {
+        if (!disposed) {
+          setMapError(error instanceof Error ? error.message : String(error));
+          setLoading(false);
+        }
+      }
+    };
+    void start();
+    return () => {
+      disposed = true;
+      locationSubscription?.remove();
+      if (channel) void supabase.removeChannel(channel);
+    };
+  }, []);
 
   const centerOnMe = async () => {
     if (!myLocation || !mapRef.current) return;
