@@ -35,7 +35,7 @@ flowchart TD
 
 Expo Router는 `app/`을 라우트 루트로 사용합니다. `app/index.tsx`는 인증 상태에 따라 로그인 또는 대시보드로 이동하며, `app/(tabs)/_layout.tsx`에 대시보드·기록·목표·히스토리·지도·설정 탭이 있습니다. `app/(tabs)/map.native.tsx`는 실제 지도, `map.web.tsx`는 미리보기 UI입니다. `components/app/`은 복제 라우트 후보지만 현재 라우트 루트가 아니므로 삭제하지 않습니다. `components/contexts/DataContext.tsx`는 루트와 여러 화면에서 직접 사용합니다.
 
-`DataContext`의 로컬 키는 `@SmokeTracker:entries`, `@SmokeTracker:goals`이고 인증 저장 키는 `@SmokeTracker:supabase-auth`입니다. 저장 키 변경이나 계정별 데이터 분리는 마이그레이션 설계와 실기기 검증이 선행되어야 합니다.
+기존 로컬 키 `@SmokeTracker:entries`, `@SmokeTracker:goals`와 인증 키 `@SmokeTracker:supabase-auth`는 유지합니다. Phase 1은 계정별 스냅샷을 별도 키에 저장하며 기존 로컬 기록은 설정에서 명시적으로 가져올 수 있습니다. 동기화 및 서버 검증 조건은 [Phase 1 결과](docs/phase1-safety.md)와 [서버 계약](docs/server-contract.md)에 있습니다.
 
 ## VS Code 터미널 명령
 
@@ -50,7 +50,7 @@ npm run build:web
 npm start
 ```
 
-현재 `npm test`는 Phase 0에서 확인한 회귀 사례 4건이 실패합니다. 이 실패를 해결하고 네이티브 수동 검증을 마치기 전에는 계산·동기화 변경이 완료된 것으로 보지 않습니다.
+Phase 1 기준 `npm test`는 29개 테스트가 통과합니다. 기기와 실제 서버 검증은 아직 필요합니다.
 
 Android 에뮬레이터 또는 연결된 기기에서는 `npm run android`, macOS의 iOS 시뮬레이터에서는 `npm run ios`를 사용합니다. 위치·알림·오디오 권한 검증에는 실제 기기가 필요할 수 있습니다. `build:web`은 정적 웹 번들 확인이며 네이티브 빌드를 대신하지 않습니다.
 
