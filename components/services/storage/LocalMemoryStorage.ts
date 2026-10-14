@@ -1,5 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { IStorage } from './Storage';
+import { AsyncStorageProvider, type IStorage } from './Storage';
 
 interface CacheEntry {
   data: string;
@@ -11,7 +10,7 @@ export class LocalMemoryStorage implements IStorage {
   private cache: Map<string, CacheEntry> = new Map();
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes default cache
   
-  constructor(private fallbackStorage: IStorage = new (require('./Storage').AsyncStorageProvider)()) {}
+  constructor(private fallbackStorage: IStorage = new AsyncStorageProvider()) {}
 
   async getItem(key: string): Promise<string | null> {
     // Check memory cache first
@@ -35,7 +34,7 @@ export class LocalMemoryStorage implements IStorage {
       return value;
     } catch (error) {
       console.error(`Error getting item ${key}:`, error);
-      return null;
+      throw error;
     }
   }
 
@@ -52,6 +51,7 @@ export class LocalMemoryStorage implements IStorage {
       await this.fallbackStorage.setItem(key, value);
       console.log(`Cached and persisted key: ${key}`);
     } catch (error) {
+      this.cache.delete(key);
       console.error(`Error setting item ${key}:`, error);
       throw error;
     }
@@ -95,6 +95,7 @@ export class LocalMemoryStorage implements IStorage {
         }
       } catch (error) {
         console.error('Error in multiGet:', error);
+        throw error;
       }
     }
 

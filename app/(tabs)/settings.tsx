@@ -135,7 +135,7 @@ export default function SettingsTab() {
   const [themeToggleCount, setThemeToggleCount] = useState(0);
   const { t } = useTranslation();
   const { user, updateNickname, deleteAccount } = useAuth();
-  const { getActiveGoals, entries, addEntry } = useData();
+  const { getActiveGoals, entries, addEntry, syncError, retrySync, legacyDataAvailable, importLegacyData } = useData();
 
   // 알림 설정 초기화 및 권한 확인
   useEffect(() => {
@@ -397,6 +397,34 @@ export default function SettingsTab() {
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior="automatic"
       >
+        {(syncError || legacyDataAvailable) && (
+          <SettingsSection title={t('sync.title')} icon={<Bell size={20} color={colors.primary} />}>
+            {syncError && (
+              <View style={styles.settingCard}>
+                <Text accessibilityRole="alert" style={styles.settingDescription}>{t('sync.problem')} {syncError}</Text>
+                <TouchableOpacity style={[styles.themeButton, { backgroundColor: colors.primary }]} onPress={() => { void retrySync(); }}>
+                  <Text style={styles.themeButtonText}>{t('sync.retry')}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {legacyDataAvailable && user && (
+              <View style={styles.settingCard}>
+                <Text style={styles.settingDescription}>{t('sync.legacy')}</Text>
+                <TouchableOpacity style={[styles.themeButton, { backgroundColor: colors.primary }]} onPress={() => {
+                  Alert.alert(t('sync.import'), t('sync.importConfirm'), [
+                    { text: t('common.cancel'), style: 'cancel' },
+                    { text: t('sync.import'), onPress: async () => {
+                      try { await importLegacyData(); Alert.alert(t('sync.imported')); }
+                      catch (error) { Alert.alert(t('common.error'), String(error)); }
+                    } },
+                  ]);
+                }}>
+                  <Text style={styles.themeButtonText}>{t('sync.import')}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </SettingsSection>
+        )}
         <SettingsSection
           title={t('settings.profile')}
           icon={<Palette size={20} color={colors.primary} />}

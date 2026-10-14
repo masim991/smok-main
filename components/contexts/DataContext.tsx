@@ -1,13 +1,15 @@
 "use client"
 
 import type * as React from "react"
-import { createContext, useContext, useState, useEffect, type ReactNode, useCallback } from "react"
-import { type IStorage, AsyncStorageProvider } from "@/components/services/storage/Storage"
+import { createContext, useContext, useState, useEffect, useRef, type ReactNode, useCallback } from "react"
+import { type IStorage } from "@/components/services/storage/Storage"
 import { localMemoryStorage } from "@/components/services/storage/LocalMemoryStorage"
 import { notificationService } from "@/components/services/notifications/LocalNotifications"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/contexts/AuthContext"
-import { entriesOnDay, weekSummary, monthTrend, goalCurrent, goalProgress } from "@/lib/recordMetrics"
+import { entriesOnDay, weekSummary, monthTrend, goalCurrent, goalProgress, isManualOnlyGoal } from "@/lib/recordMetrics"
+import { accountDataKey, queueMutation, reconcileRemote, type PendingMutation } from "@/lib/syncPolicy"
+import { errorMessage } from "@/lib/errorMessage"
 
 // 추천 목표 템플릿(초기 선택용)
 export const PRESET_GOALS = [
@@ -87,6 +89,10 @@ interface DataContextType {
   getCompletedGoals: () => Goal[]
   updateGoalProgress: (id: string, progress: number) => Promise<void>
   completeGoal: (id: string) => Promise<void>
+  syncError: string | null
+  retrySync: () => Promise<void>
+  legacyDataAvailable: boolean
+  importLegacyData: () => Promise<void>
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined)
@@ -100,57 +106,183 @@ interface DataProviderProps {
   storage?: IStorage // Optional dependency injection for future DB swap
 }
 
+type AccountMutation = PendingMutation<SmokeEntry | Goal>
+type AccountSnapshot = { entries: SmokeEntry[]; goals: Goal[]; pending: AccountMutation[]; legacyImported?: boolean }
+
+const entryToRemote = (entry: SmokeEntry, userId: string) => ({
+  id: entry.id, user_id: userId, date: entry.date, count: entry.count, notes: entry.notes ?? null,
+})
+const goalToRemote = (goal: Goal, userId: string) => ({
+  id: goal.id, user_id: userId, type: goal.type, target: goal.target, start_date: goal.startDate,
+  status: goal.status, current_value: goal.currentValue, title: goal.title, description: goal.description,
+  completed_at: goal.completedAt ?? null, difficulty: goal.difficulty, icon: goal.icon,
+  red_mean_title: goal.redMeanTitle ?? null, red_mean_description: goal.redMeanDescription ?? null,
+})
+
+const remoteToGoal = (g: any): Goal => ({
+  id: g.id, type: g.type, target: g.target, startDate: g.start_date, status: g.status,
+  currentValue: g.current_value, title: g.title, description: g.description,
+  completedAt: g.completed_at ?? undefined, difficulty: g.difficulty, icon: g.icon,
+  redMeanTitle: g.red_mean_title ?? undefined, redMeanDescription: g.red_mean_description ?? undefined,
+})
+
 // 앱 전역에서 기록/목표 데이터를 제공하고 로컬/원격(Supabase) 동기화를 담당
 export const DataProvider: React.FC<DataProviderProps> = ({ children, storage }) => {
   const store = storage ?? localMemoryStorage
   const [entries, setEntries] = useState<SmokeEntry[]>([])
   const [goals, setGoals] = useState<Goal[]>([])
+  const [pending, setPending] = useState<AccountMutation[]>([])
+  const [syncError, setSyncError] = useState<string | null>(null)
+  const [legacyDataAvailable, setLegacyDataAvailable] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const { user } = useAuth()
+  const scope = user?.id ?? 'guest'
+  const scopeRef = useRef(scope)
+  scopeRef.current = scope
+  const [loadedScope, setLoadedScope] = useState<string | null>(null)
+  const snapshotRef = useRef<AccountSnapshot>({ entries: [], goals: [], pending: [] })
+  const writeQueue = useRef(Promise.resolve())
+  const localQueue = useRef(Promise.resolve())
+  const flushInFlight = useRef<Promise<void> | null>(null)
+  const blockedMutations = useRef(new Set<string>())
 
-  // 로그인 후 Supabase에서 최신 데이터를 가져와 로컬에 반영
-  const syncFromSupabase = useCallback(async () => {
+  const persist = useCallback(async (snapshot: AccountSnapshot) => {
+    const key = user ? accountDataKey(user.id) : null
+    writeQueue.current = writeQueue.current.catch(() => undefined).then(async () => {
+      if (key) await store.setItem(key, JSON.stringify(snapshot))
+      else {
+        await store.setItem(STORAGE_KEY, JSON.stringify(snapshot.entries))
+        await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(snapshot.goals))
+      }
+    })
+    await writeQueue.current
+    if (scopeRef.current === (user?.id ?? 'guest')) {
+      snapshotRef.current = snapshot
+      setEntries(snapshot.entries)
+      setGoals(snapshot.goals)
+      setPending(snapshot.pending)
+    }
+  }, [store, user?.id])
+
+  const enqueueLocal = useCallback(async <T,>(work: () => Promise<T>): Promise<T> => {
+    const task = localQueue.current.catch(() => undefined).then(work)
+    localQueue.current = task.then(() => undefined, () => undefined)
+    return task
+  }, [])
+
+  const flushPending = useCallback(async () => {
     if (!user) return
-    try {
-      const { data: remoteEntries, error: e1 } = await supabase
-        .from('entries')
-        .select('id,date,count,notes')
-        .eq('user_id', user.id)
-      if (!e1 && remoteEntries) {
-        setEntries(remoteEntries as any)
-        await store.setItem(STORAGE_KEY, JSON.stringify(remoteEntries))
+    if (flushInFlight.current) return flushInFlight.current
+    const userId = user.id
+    const task = (async () => {
+      const attempted = new Set<AccountMutation>()
+      while (true) {
+        const operation = snapshotRef.current.pending.find(item => !attempted.has(item))
+        if (!operation || scopeRef.current !== userId) break
+        attempted.add(operation)
+        if (blockedMutations.current.has(`${operation.table}:${operation.id}`)) continue
+        try {
+          const query = supabase.from(operation.table)
+          let result: { error: { message: string } | null }
+          if (operation.kind === 'delete') {
+            result = await query.delete().eq('user_id', userId).eq('id', operation.id)
+          } else if (operation.table === 'entries') {
+            result = await query.upsert(entryToRemote(operation.value as SmokeEntry, userId))
+          } else {
+            result = await query.upsert(goalToRemote(operation.value as Goal, userId))
+          }
+          if (result.error) throw result.error
+          await enqueueLocal(async () => {
+            const current = snapshotRef.current
+            if (current.pending.includes(operation)) {
+              await persist({ ...current, pending: current.pending.filter(item => item !== operation) })
+            }
+          })
+        } catch (error) {
+          setSyncError(`동기화 실패: ${errorMessage(error)}`)
+        }
       }
-    } catch (e) {
-      console.log('[Sync] Entries fetch skipped:', e)
-    }
+    })()
+    flushInFlight.current = task
+    try { await task } finally { flushInFlight.current = null }
+  }, [persist, user?.id, enqueueLocal])
+
+  // Remote data is merged conservatively; local-only and conflicting rows are never overwritten.
+  const syncFromSupabase = useCallback(async () => {
+    if (!user || loadedScope !== user.id) return
+    const userId = user.id
     try {
-      const { data: remoteGoals, error: e2 } = await supabase
-        .from('goals')
+      const entryResult = await supabase.from('entries').select('id,date,count,notes').eq('user_id', userId)
+      if (entryResult.error) throw entryResult.error
+      const goalResult = await supabase.from('goals')
         .select('id,type,target,start_date,status,current_value,title,description,completed_at,difficulty,icon,red_mean_title,red_mean_description')
-        .eq('user_id', user.id)
-      if (!e2 && remoteGoals) {
-        const mapped = (remoteGoals as any[]).map(g => ({
-          id: g.id,
-          type: g.type,
-          target: g.target,
-          startDate: g.start_date,
-          status: g.status,
-          currentValue: g.current_value,
-          title: g.title,
-          description: g.description,
-          completedAt: g.completed_at ?? undefined,
-          difficulty: g.difficulty,
-          icon: g.icon,
-          redMeanTitle: g.red_mean_title ?? undefined,
-          redMeanDescription: g.red_mean_description ?? undefined,
-        })) as Goal[]
-        setGoals(mapped)
-        await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(mapped))
-      }
-    } catch (e) {
-      console.log('[Sync] Goals fetch skipped:', e)
+        .eq('user_id', userId)
+      if (goalResult.error) throw goalResult.error
+      if (scopeRef.current !== userId) return
+      await enqueueLocal(async () => {
+        if (scopeRef.current !== userId) return
+        const local = snapshotRef.current
+        const mergedEntries = reconcileRemote(local.entries, (entryResult.data ?? []) as SmokeEntry[], local.pending as PendingMutation<SmokeEntry>[], 'entries')
+        const mergedGoals = reconcileRemote(local.goals, (goalResult.data ?? []).map(remoteToGoal), local.pending as PendingMutation<Goal>[], 'goals')
+        const acknowledged = new Set([...mergedEntries.acknowledged.map(id => `entries:${id}`), ...mergedGoals.acknowledged.map(id => `goals:${id}`)])
+        const next: AccountSnapshot = {
+          entries: mergedEntries.records, goals: mergedGoals.records,
+          pending: local.pending.filter(item => !acknowledged.has(`${item.table}:${item.id}`)),
+          legacyImported: local.legacyImported,
+        }
+        const blocked = new Set([...mergedEntries.conflicts.map(id => `entries:${id}`), ...mergedGoals.conflicts.map(id => `goals:${id}`)])
+        blockedMutations.current = blocked
+        await persist(next)
+        setSyncError(blocked.size ? `동기화 충돌 ${blocked.size}건: 로컬 기록을 보존했습니다.` : null)
+      })
+      await flushPending()
+    } catch (error) {
+      setSyncError(`동기화 조회 실패: ${errorMessage(error)}`)
     }
-  }, [user, store])
+  }, [user?.id, loadedScope, persist, flushPending, enqueueLocal])
+
+  const saveLocal = useCallback(async (
+    nextEntries: SmokeEntry[] | ((current: SmokeEntry[]) => SmokeEntry[]),
+    nextGoals: Goal[] | ((current: Goal[], entriesAfter: SmokeEntry[]) => Goal[]),
+    mutations: AccountMutation[] | ((entries: SmokeEntry[], goals: Goal[]) => AccountMutation[]) = [],
+  ) => {
+    const changed = await enqueueLocal(async () => {
+      if (loadedScope !== scope || scopeRef.current !== scope) throw new Error('Data is still loading')
+      const current = snapshotRef.current
+      const entriesAfter = typeof nextEntries === 'function' ? nextEntries(current.entries) : nextEntries
+      const goalsAfter = typeof nextGoals === 'function' ? nextGoals(current.goals, entriesAfter) : nextGoals
+      const operations = typeof mutations === 'function' ? mutations(entriesAfter, goalsAfter) : mutations
+      if (entriesAfter === current.entries && goalsAfter === current.goals && operations.length === 0) return false
+      let nextPending = current.pending
+      if (user) for (const mutation of operations) nextPending = queueMutation(nextPending, mutation)
+      await persist({ ...current, entries: entriesAfter, goals: goalsAfter, pending: nextPending })
+      return operations.length > 0
+    }).catch(error => {
+      setSyncError(`로컬 저장 실패: ${errorMessage(error)}`)
+      throw error
+    })
+    if (user && changed) await flushPending()
+  }, [loadedScope, scope, user?.id, persist, flushPending, enqueueLocal])
+
+  const importLegacyData = useCallback(async () => {
+    if (!user || loadedScope !== user.id) throw new Error('Sign in before importing local records')
+    const pairs = await store.multiGet([STORAGE_KEY, GOALS_STORAGE_KEY])
+    const oldEntries: SmokeEntry[] = JSON.parse(pairs.find(([key]) => key === STORAGE_KEY)?.[1] ?? '[]')
+    const oldGoals: Goal[] = JSON.parse(pairs.find(([key]) => key === GOALS_STORAGE_KEY)?.[1] ?? '[]')
+    await enqueueLocal(async () => {
+      const current = snapshotRef.current
+      const entryIds = new Set(current.entries.map(item => item.id))
+      const goalIds = new Set(current.goals.map(item => item.id))
+      const extraEntries = oldEntries.filter(item => !entryIds.has(item.id))
+      const extraGoals = oldGoals.filter(item => !goalIds.has(item.id))
+      let nextPending = current.pending
+      for (const entry of extraEntries) nextPending = queueMutation(nextPending, { table: 'entries', kind: 'upsert', id: entry.id, value: entry })
+      for (const goal of extraGoals) nextPending = queueMutation(nextPending, { table: 'goals', kind: 'upsert', id: goal.id, value: goal })
+      await persist({ ...current, entries: [...current.entries, ...extraEntries], goals: [...current.goals, ...extraGoals], pending: nextPending, legacyImported: true })
+    })
+    setLegacyDataAvailable(false)
+    await syncFromSupabase()
+  }, [user?.id, loadedScope, store, persist, syncFromSupabase, enqueueLocal])
 
   // Helper functions for goals
   // 활성 목표 목록 반환
@@ -165,29 +297,31 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
 
   const updateGoalProgress = useCallback(async (id: string, progress: number) => {
     try {
-      const updatedGoals = goals.map(goal => 
-        goal.id === id ? { ...goal, currentValue: progress } as Goal : goal
-      )
-      setGoals(updatedGoals)
-      await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(updatedGoals))
+      await saveLocal(current => current, current => current.map(goal =>
+        goal.id === id ? { ...goal, currentValue: progress } : goal
+      ), (_entries, updatedGoals) => {
+        const changed = updatedGoals.find(goal => goal.id === id)
+        return changed ? [{ table: 'goals', kind: 'upsert', id, value: changed }] : []
+      })
     } catch (error) {
       console.error('Error updating goal progress:', error)
       throw error
     }
-  }, [goals, store])
+  }, [saveLocal])
 
   const completeGoal = useCallback(async (id: string) => {
     try {
       const goal = goals.find(g => g.id === id)
-      const updatedGoals = goals.map(goal => 
-        goal.id === id ? { 
-          ...goal, 
+      await saveLocal(current => current, current => current.map(item =>
+        item.id === id ? {
+          ...item,
           status: 'completed' as const,
-          completedAt: new Date().toISOString() 
-        } as Goal : goal
-      )
-      setGoals(updatedGoals)
-      await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(updatedGoals))
+          completedAt: new Date().toISOString()
+        } : item
+      ), (_entries, updatedGoals) => {
+        const changed = updatedGoals.find(item => item.id === id)
+        return changed ? [{ table: 'goals', kind: 'upsert', id, value: changed }] : []
+      })
       
       // Send congratulatory notification
       if (goal) {
@@ -200,101 +334,74 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
       console.error('Error completing goal:', error)
       throw error
     }
-  }, [goals, store])
+  }, [goals, saveLocal])
 
   // Load data on mount
   // 마운트 시 로컬 저장소에서 데이터 로드
   useEffect(() => {
+    let cancelled = false
     const loadData = async () => {
       setIsLoading(true)
+      setLoadedScope(null)
+      setSyncError(null)
+      setEntries([])
+      setGoals([])
+      setPending([])
+      blockedMutations.current = new Set()
       try {
-        // Preload frequently accessed keys
-        await store.preloadData?.([STORAGE_KEY, GOALS_STORAGE_KEY])
-        
-        const pairs = await store.multiGet([STORAGE_KEY, GOALS_STORAGE_KEY])
-        const entriesJson = pairs.find(([key]: [string, string | null]) => key === STORAGE_KEY)?.[1]
-        const goalsJson = pairs.find(([key]: [string, string | null]) => key === GOALS_STORAGE_KEY)?.[1]
-        
-        if (entriesJson) {
-          const parsedEntries = JSON.parse(entriesJson)
-          setEntries(parsedEntries)
+        let snapshot: AccountSnapshot
+        if (user) {
+          const accountJson = await store.getItem(accountDataKey(user.id))
+          snapshot = accountJson ? JSON.parse(accountJson) : { entries: [], goals: [], pending: [] }
+          const legacy = await store.multiGet([STORAGE_KEY, GOALS_STORAGE_KEY])
+          const legacyEntries = legacy.find(([key]) => key === STORAGE_KEY)?.[1]
+          const legacyGoals = legacy.find(([key]) => key === GOALS_STORAGE_KEY)?.[1]
+          if (!cancelled) setLegacyDataAvailable(!snapshot.legacyImported && Boolean((legacyEntries && JSON.parse(legacyEntries).length) || (legacyGoals && JSON.parse(legacyGoals).length)))
+        } else {
+          const pairs = await store.multiGet([STORAGE_KEY, GOALS_STORAGE_KEY])
+          snapshot = {
+            entries: JSON.parse(pairs.find(([key]) => key === STORAGE_KEY)?.[1] ?? '[]'),
+            goals: JSON.parse(pairs.find(([key]) => key === GOALS_STORAGE_KEY)?.[1] ?? '[]'),
+            pending: [],
+          }
+          if (!cancelled) setLegacyDataAvailable(false)
         }
-        if (goalsJson) {
-          const parsedGoals = JSON.parse(goalsJson)
-          setGoals(parsedGoals)
-        }
+        if (cancelled) return
+        snapshot.pending ??= []
+        snapshotRef.current = snapshot
+        setEntries(snapshot.entries)
+        setGoals(snapshot.goals)
+        setPending(snapshot.pending)
       } catch (e) {
-        console.error("Failed to load data", e)
+        if (!cancelled) setSyncError(`로컬 데이터 로드 실패: ${errorMessage(e)}`)
       } finally {
-        setIsLoading(false)
+        if (!cancelled) {
+          setLoadedScope(scope)
+          setIsLoading(false)
+        }
       }
     }
     loadData()
-  }, [store])
+    return () => { cancelled = true }
+  }, [store, scope])
 
   // 로그인 상태가 생기면 원격 동기화 시도
   useEffect(() => {
-    if (user) {
+    if (user && loadedScope === user.id) {
       syncFromSupabase()
     }
-  }, [user, syncFromSupabase])
-
-  // entries 변경 시 로컬 저장소에 저장
-  useEffect(() => {
-    const saveData = async () => {
-      if (entries.length > 0 || isLoading === false) { // Only save if we have data or finished loading
-        try {
-          await store.setItem(STORAGE_KEY, JSON.stringify(entries))
-          console.log('Entries saved successfully:', entries.length)
-        } catch (e) {
-          console.error("Failed to save entries data", e)
-        }
-      }
-    }
-    saveData()
-  }, [entries, store, isLoading])
-
-  // goals 변경 시 로컬 저장소에 저장
-  useEffect(() => {
-    const saveGoals = async () => {
-      if (goals.length > 0 || isLoading === false) { // Only save if we have data or finished loading
-        try {
-          await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(goals))
-          console.log('Goals saved successfully:', goals.length)
-        } catch (e) {
-          console.error("Failed to save goals data", e)
-        }
-      }
-    }
-    saveGoals()
-  }, [goals, store, isLoading])
+  }, [user?.id, loadedScope, syncFromSupabase])
 
   // 기록 추가: 로컬 상태/저장소 갱신 후 로그인 시 Supabase upsert
   const addEntry = async (count: number, notes?: string): Promise<void> => {
     try {
       const newEntry: SmokeEntry = {
-        id: Date.now().toString(),
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
         date: new Date().toISOString(),
         count,
         notes,
       }
-      const updatedEntries = [...entries, newEntry]
-      setEntries(updatedEntries)
-      await store.setItem(STORAGE_KEY, JSON.stringify(updatedEntries))
-      // remote upsert
-      if (user) {
-        try {
-          await supabase.from('entries').upsert({
-            id: newEntry.id,
-            user_id: user.id,
-            date: newEntry.date,
-            count: newEntry.count,
-            notes: newEntry.notes ?? null,
-          })
-        } catch (e) {
-          console.log('[Sync] addEntry upsert skipped:', e)
-        }
-      }
+      await saveLocal(current => [...current, newEntry], current => current, [{ table: 'entries', kind: 'upsert', id: newEntry.id, value: newEntry }])
     } catch (error) {
       console.error("Error adding entry:", error)
       throw error
@@ -304,16 +411,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
   // 기록 삭제: 로컬/원격 삭제
   const removeEntry = async (id: string) => {
     try {
-      const updatedEntries = entries.filter((e) => e.id !== id)
-      setEntries(updatedEntries)
-      await store.setItem(STORAGE_KEY, JSON.stringify(updatedEntries))
-      if (user) {
-        try {
-          await supabase.from('entries').delete().eq('user_id', user.id).eq('id', id)
-        } catch (e) {
-          console.log('[Sync] removeEntry delete skipped:', e)
-        }
-      }
+      await saveLocal(current => current.filter(entry => entry.id !== id), current => current, [{ table: 'entries', kind: 'delete', id }])
     } catch (error) {
       console.error("Error removing entry:", error)
       throw error
@@ -333,36 +431,12 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
       const newGoal: Goal = {
         ...goal,
         target,
-        id: Date.now().toString(),
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
         status: "active",
         startDate: new Date().toISOString(),
         currentValue: goal.currentValue || 0,
       }
-      const updatedGoals = [...goals, newGoal]
-      setGoals(updatedGoals)
-      await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(updatedGoals))
-      if (user) {
-        try {
-          await supabase.from('goals').upsert({
-            id: newGoal.id,
-            user_id: user.id,
-            type: newGoal.type,
-            target: newGoal.target,
-            start_date: newGoal.startDate,
-            status: newGoal.status,
-            current_value: newGoal.currentValue,
-            title: newGoal.title,
-            description: newGoal.description,
-            completed_at: newGoal.completedAt ?? null,
-            difficulty: newGoal.difficulty,
-            icon: newGoal.icon,
-            red_mean_title: newGoal.redMeanTitle ?? null,
-            red_mean_description: newGoal.redMeanDescription ?? null,
-          })
-        } catch (e) {
-          console.log('[Sync] addGoal upsert skipped:', e)
-        }
-      }
+      await saveLocal(current => current, current => [...current, newGoal], [{ table: 'goals', kind: 'upsert', id: newGoal.id, value: newGoal }])
       
       // Schedule notification for new goal
       try {
@@ -381,7 +455,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
   // 목표 업데이트: 완료 조건 체크 포함, 로컬/원격 반영
   const updateGoal = async (id: string, updates: Partial<Goal>) => {
     try {
-      const updatedGoals = goals.map((goal) => {
+      let changed: Goal | undefined
+      await saveLocal(current => current, current => current.map((goal) => {
         if (goal.id === id) {
           const updatedGoal = { ...goal, ...updates }
           // Check if goal is completed
@@ -393,39 +468,15 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
             updatedGoal.status = "completed"
             updatedGoal.completedAt = new Date().toISOString()
           }
+          changed = updatedGoal
           return updatedGoal
         }
         return goal
+      }), (_entries, updatedGoals) => {
+        const updated = updatedGoals.find(goal => goal.id === id)
+        return updated ? [{ table: 'goals', kind: 'upsert', id, value: updated }] : []
       })
-
-      setGoals(updatedGoals)
-      await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(updatedGoals))
-      if (user) {
-        try {
-          const g = updatedGoals.find((gg) => gg.id === id)
-          if (g) {
-            await supabase.from('goals').upsert({
-              id: g.id,
-              user_id: user.id,
-              type: g.type,
-              target: g.target,
-              start_date: g.startDate,
-              status: g.status,
-              current_value: g.currentValue,
-              title: g.title,
-              description: g.description,
-              completed_at: g.completedAt ?? null,
-              difficulty: g.difficulty,
-              icon: g.icon,
-              red_mean_title: g.redMeanTitle ?? null,
-              red_mean_description: g.redMeanDescription ?? null,
-            })
-          }
-        } catch (e) {
-          console.log('[Sync] updateGoal upsert skipped:', e)
-        }
-      }
-      return updatedGoals.find((g) => g.id === id)
+      return changed
     } catch (error) {
       console.error("Error updating goal:", error)
       throw error
@@ -435,16 +486,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
   // 목표 삭제: 로컬/원격 반영
   const removeGoal = async (id: string) => {
     try {
-      const updatedGoals = goals.filter((goal) => goal.id !== id)
-      setGoals(updatedGoals)
-      await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(updatedGoals))
-      if (user) {
-        try {
-          await supabase.from('goals').delete().eq('user_id', user.id).eq('id', id)
-        } catch (e) {
-          console.log('[Sync] removeGoal delete skipped:', e)
-        }
-      }
+      await saveLocal(current => current, current => current.filter(goal => goal.id !== id), [{ table: 'goals', kind: 'delete', id }])
     } catch (error) {
       console.error("Error removing goal:", error)
       throw error
@@ -469,48 +511,36 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
   // entries 변화에 따라 활성 목표의 진행도 갱신 및 완료 처리
   const updateGoalsProgress = useCallback(async () => {
     try {
-      if (goals.length === 0) return;
-      
-      const updatedGoals = goals.map((goal) => {
-        if (goal.status !== "active") return goal
-
-        const currentValue = goalCurrent(goal, entries, new Date())
-
-        // Check if goal should be completed
-        const shouldComplete = goal.type !== 'reduction' && currentValue >= goal.target && goal.target > 0
-        
-        // Send notification for goal completion
-        if (shouldComplete) {
-          notificationService.scheduleGoalReminder(
-            goal.title || 'Goal',
-            `🎉 Amazing! You've reached your goal: ${goal.title}!`
-          ).catch(console.error)
-        }
-        
-        return { 
-          ...goal, 
+      if (goals.length === 0) return
+      const completed: Goal[] = []
+      await saveLocal(current => current, (currentGoals, currentEntries) => {
+        const next = currentGoals.map(goal => {
+        if (goal.status !== 'active' || isManualOnlyGoal(goal)) return goal
+        const currentValue = goalCurrent(goal, currentEntries, new Date())
+        const shouldComplete = goal.type !== 'reduction' && goal.target > 0 && currentValue >= goal.target
+        if (goal.currentValue === currentValue && !shouldComplete) return goal
+        const updated: Goal = {
+          ...goal,
           currentValue,
-          ...(shouldComplete && {
-            status: "completed" as const,
-            completedAt: new Date().toISOString()
-          })
+          ...(shouldComplete ? { status: 'completed' as const, completedAt: new Date().toISOString() } : {}),
         }
-      })
-
-      // Only update if there are actual changes
-      const hasChanges = updatedGoals.some((goal, index) => 
-        goal.currentValue !== goals[index].currentValue || 
-        goal.status !== goals[index].status
-      )
-
-      if (hasChanges) {
-        setGoals(updatedGoals)
-        await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(updatedGoals))
+        if (shouldComplete) completed.push(updated)
+        return updated
+        })
+        return next.every((goal, index) => goal === currentGoals[index]) ? currentGoals : next
+      }, (_entries, updatedGoals) => updatedGoals
+        .filter((goal, index) => goal !== snapshotRef.current.goals[index])
+        .map(goal => ({ table: 'goals', kind: 'upsert', id: goal.id, value: goal })))
+      for (const goal of completed) {
+        notificationService.scheduleGoalReminder(
+          goal.title || 'Goal',
+          `🎉 Amazing! You've reached your goal: ${goal.title}!`
+        ).catch(console.error)
       }
     } catch (error) {
       console.error("Error updating goals progress:", error)
     }
-  }, [entries, goals, store])
+  }, [entries, goals, saveLocal])
 
   // entries 변경 시 진행도 자동 업데이트
   useEffect(() => {
@@ -525,8 +555,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
   }
 
   const contextValue: DataContextType = {
-    entries,
-    goals,
+    entries: loadedScope === scope ? entries : [],
+    goals: loadedScope === scope ? goals : [],
     addEntry,
     removeEntry,
     addGoal,
@@ -540,6 +570,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
     getCompletedGoals,
     updateGoalProgress,
     completeGoal,
+    syncError,
+    retrySync: syncFromSupabase,
+    legacyDataAvailable,
+    importLegacyData,
   }
 
   // 주기적으로 캐시 정리

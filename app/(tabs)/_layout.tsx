@@ -4,6 +4,7 @@ import { Calendar, Target, ChartBar as BarChart3, Settings, Home } from 'lucide-
 import { useColorScheme } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
+import { SyncBanner } from '@/components/SyncBanner';
 
 export default function TabLayout() {
   const { colors } = useTheme();
@@ -12,6 +13,8 @@ export default function TabLayout() {
   const { t } = useTranslation();
 
   return (
+    <>
+    <SyncBanner />
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -103,5 +106,6 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    </>
   );
 }
