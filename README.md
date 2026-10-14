@@ -70,3 +70,5 @@ Android 에뮬레이터 또는 연결된 기기에서는 `npm run android`, macO
 ## 웹 지원 범위
 
 웹용 지도 화면은 Android/iOS 전용 기능이라는 안내만 표시하며 지도/구역 저장 조작을 제공하지 않습니다. 위치 백그라운드 작업, 네이티브 알림, 오디오 및 웨어러블 감지는 웹 지원으로 확인되지 않았습니다. Phase 2에서 `npm run build:web`은 통과했지만 브라우저 실사용 검증은 아직 필요합니다. 조사와 검증 결과는 [Phase 0 조사](docs/phase0-baseline.md)에 기록합니다.
+
+단계별 결과: [Phase 1 정확성·안전](docs/phase1-safety.md) · [Phase 2 구조·성능](docs/phase2-structure-performance.md) · [Phase 3 UX 제안](docs/phase3-ux-proposal.md). 서버 변경 전 검증 조건은 [서버 계약](docs/server-contract.md)을 참고하세요.
