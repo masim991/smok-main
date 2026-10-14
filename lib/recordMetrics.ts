@@ -5,6 +5,19 @@ export interface TrackedGoal {
   target: number
   startDate: string
   currentValue: number
+  title?: string
+  redMeanTitle?: string
+}
+
+const manualLegacyTitles = new Set([
+  'REDUCE WEAKNESS', 'WEEKEND STRENGTH', 'PROFESSIONAL POWER', 'MORNING DISCIPLINE',
+  '절반으로 줄이기', '주말 금연', '근무 중 금연', '아침 금연',
+  'Cut in half', 'Smoke-free weekends', 'No smoking during work', 'No smoking in the morning',
+  'Half Your Intake', 'Weekend Warrior',
+])
+
+export function isManualOnlyGoal(goal: TrackedGoal): boolean {
+  return manualLegacyTitles.has(goal.redMeanTitle ?? '') || manualLegacyTitles.has(goal.title ?? '')
 }
 
 export function localDayKey(date: Date): string {
@@ -62,6 +75,7 @@ export function monthTrend(entries: readonly DatedEntry[], now: Date) {
 }
 
 export function goalCurrent(goal: TrackedGoal, entries: readonly DatedEntry[], now: Date): number {
+  if (isManualOnlyGoal(goal)) return goal.currentValue
   const totals = dailyCounts(entries)
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const start = entryDayKey(goal.startDate)
@@ -88,6 +102,7 @@ export function goalCurrent(goal: TrackedGoal, entries: readonly DatedEntry[], n
 }
 
 export function goalProgress(goal: TrackedGoal, entries: readonly DatedEntry[], now: Date) {
+  if (isManualOnlyGoal(goal)) return { current: goal.currentValue, target: goal.target, progress: 0 }
   const current = goalCurrent(goal, entries, now)
   const target = goal.target
   if (target <= 0) return { current, target, progress: 0 }

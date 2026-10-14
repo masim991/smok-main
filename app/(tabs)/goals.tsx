@@ -11,7 +11,7 @@ import {
 import { useTheme } from '@/contexts/ThemeContext';
 import { useData } from '@/components/contexts/DataContext';
 import type { Goal, GoalType } from '@/components/contexts/DataContext';
-import { entriesOnDay } from '@/lib/recordMetrics';
+import { entriesOnDay, isManualOnlyGoal } from '@/lib/recordMetrics';
 import { useTranslation } from 'react-i18next';
 import {
   Check,
@@ -163,7 +163,10 @@ function GoalsTab() {
   const completedGoals = goals.filter((g: Goal) => g.status === 'completed');
 
   // Always show all templates for now - we'll filter later if needed
-  const availableTemplates = GOAL_TEMPLATES;
+  // These legacy templates need a baseline or schedule that the stored model does not contain.
+  const availableTemplates = GOAL_TEMPLATES.filter(template =>
+    !['reduce_half', 'weekend_warrior', 'workday_clean', 'morning_control'].includes(template.id)
+  );
 
   const calculateGoalProgress = (goal: Goal): number => {
     return getGoalProgress(goal).progress;
@@ -275,6 +278,7 @@ function GoalsTab() {
 
   const renderGoalCard = (goal: Goal) => {
     const progress = calculateGoalProgress(goal);
+    const manualOnly = isManualOnlyGoal(goal);
     const isRedTheme = theme === 'redMean';
 
     return (
@@ -355,6 +359,8 @@ function GoalsTab() {
         </View>
 
         <View style={{ marginTop: 16 }}>
+          {manualOnly && <Text style={{ color: colors.textSecondary, marginBottom: 8 }}>{t('goals.manualOnly')}</Text>}
+          {!manualOnly && <>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
             <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
               Progress: {goal.currentValue} / {goal.target}
@@ -377,6 +383,7 @@ function GoalsTab() {
               }}
             />
           </View>
+          </>}
           {goal.status === 'completed' && goal.completedAt && (
             <Text style={{
               color: colors.success,

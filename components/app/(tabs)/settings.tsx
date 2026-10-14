@@ -286,7 +286,7 @@ export default function SettingsTab() {
               <Text style={styles.warningText}>
                 ⚠️ RED MEAN MODE ACTIVE ⚠️{'\n'}
                 This mode uses harsh language and brutal honesty to motivate you. 
-                It's designed for those who need tough love to quit smoking.
+                It&apos;s designed for those who need tough love to quit smoking.
               </Text>
             </View>
           )}

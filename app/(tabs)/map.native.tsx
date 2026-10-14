@@ -22,6 +22,7 @@ export default function SmokingZonesMap() {
   const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [zones, setZones] = useState<SmokingZone[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mapError, setMapError] = useState<string | null>(null);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [locationChoiceVisible, setLocationChoiceVisible] = useState(false);
   const [listVisible, setListVisible] = useState(false);
@@ -220,19 +221,25 @@ export default function SmokingZonesMap() {
   };
 
   const fetchZones = async (r: Region) => {
-    const latMin = r.latitude - r.latitudeDelta * 0.5;
-    const latMax = r.latitude + r.latitudeDelta * 0.5;
-    const lonMin = r.longitude - r.longitudeDelta * 0.5;
-    const lonMax = r.longitude + r.longitudeDelta * 0.5;
-    const { data, error } = await supabase
-      .from('smoking_zones')
-      .select('*')
-      .gte('latitude', latMin)
-      .lte('latitude', latMax)
-      .gte('longitude', lonMin)
-      .lte('longitude', lonMax)
-      .order('created_at', { ascending: false });
-    if (!error && data) setZones(data as SmokingZone[]);
+    try {
+      const latMin = r.latitude - r.latitudeDelta * 0.5;
+      const latMax = r.latitude + r.latitudeDelta * 0.5;
+      const lonMin = r.longitude - r.longitudeDelta * 0.5;
+      const lonMax = r.longitude + r.longitudeDelta * 0.5;
+      const { data, error } = await supabase
+        .from('smoking_zones')
+        .select('*')
+        .gte('latitude', latMin)
+        .lte('latitude', latMax)
+        .gte('longitude', lonMin)
+        .lte('longitude', lonMax)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setZones((data ?? []) as SmokingZone[]);
+      setMapError(null);
+    } catch (error) {
+      setMapError(error instanceof Error ? error.message : String(error));
+    }
   };
 
   const onRegionChangeComplete = (r: Region) => {
@@ -291,6 +298,7 @@ export default function SmokingZonesMap() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.surface }]}>
         <Text style={[styles.title, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">{t('map.title')}</Text>
+        {mapError && <Text accessibilityRole="alert" style={{ color: colors.error }}>{mapError}</Text>}
       </View>
       <View style={{ flex: 1 }}>
         {region && (

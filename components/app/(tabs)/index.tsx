@@ -325,7 +325,7 @@ export default function LogTab() {
         {/* Stats Header */}
         <View style={[styles.headerGradient, { backgroundColor: colors.primary }]}>
           <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>Today's Progress</Text>
+            <Text style={styles.headerTitle}>Today&apos;s Progress</Text>
             <Text style={styles.headerSubtitle}>{getMotivationalMessage()}</Text>
             
             <View style={styles.statsRow}>

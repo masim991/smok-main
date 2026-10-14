@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState } from "react"
 
 import {
   View,
@@ -13,6 +13,8 @@ import { useTheme } from "@/contexts/ThemeContext"
 import { useTranslation } from 'react-i18next'
 import { useData } from "@/components/contexts/DataContext"
 import type { SmokeEntry } from "@/components/contexts/DataContext"
+import { dailyCounts, localDayKey, weekSummary } from '@/lib/recordMetrics'
+import { historyStats, monthBuckets } from '@/lib/historyMetrics'
 import { Calendar as RNCalendar, type DateObject } from "react-native-calendars"
 import {
   Calendar as CalendarIcon,
@@ -97,69 +99,18 @@ export default function HistoryTab() {
   const [activeTab, setActiveTab] = useState<'week' | 'month'>('week')
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(true)
   const [isStatsExpanded, setIsStatsExpanded] = useState(true)
-  const [stats, setStats] = useState({
-    total: 0,
-    average: 0,
-    trend: 0,
-    streak: 0,
-  })
-
-
-
-  // Calculate statistics
-  useEffect(() => {
-    if (entries.length === 0) return;
-
-    // Calculate total cigarettes
-    const total = entries.reduce((sum, entry) => sum + entry.count, 0);
-
-    // Calculate average per day
-    const entriesByDate = new Map();
-    entries.forEach(entry => {
-      const date = entry.date.split('T')[0];
-      entriesByDate.set(date, (entriesByDate.get(date) || 0) + entry.count);
-    });
-    const average = Math.round((total / entriesByDate.size) * 10) / 10;
-
-    // Calculate trend (simplified)
-    const firstHalf = entries.slice(0, Math.floor(entries.length / 2));
-    const secondHalf = entries.slice(Math.floor(entries.length / 2));
-    const firstAvg = firstHalf.reduce((sum, e) => sum + e.count, 0) / (firstHalf.length || 1);
-    const secondAvg = secondHalf.reduce((sum, e) => sum + e.count, 0) / (secondHalf.length || 1);
-    const trend = ((secondAvg - firstAvg) / (firstAvg || 1)) * 100;
-
-    // Calculate streak (simplified)
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const hasToday = entries.some(e => new Date(e.date).toDateString() === today.toDateString());
-    const hasYesterday = entries.some(e => new Date(e.date).toDateString() === yesterday.toDateString());
-    const streak = hasToday ? (hasYesterday ? 2 : 1) : 0;
-
-    setStats({
-      total,
-      average,
-      trend,
-      streak,
-    });
-  }, [entries]);
+  const stats = useMemo(() => historyStats(entries, new Date()), [entries])
 
   // Helper function to get monthly trend data and marked dates
   const getMonthlyTrend = useMemo(() => {
-    const monthlyData: Array<{ date: string, cigarettes: number }> = [];
+    const monthlyData = monthBuckets(entries);
     const markedDates: Record<string, { marked: boolean, dotColor: string, selectedColor?: string }> = {};
 
     // Group entries by date to get daily totals
-    const dailyTotals: Record<string, number> = {};
-    entries.forEach(entry => {
-      const dateKey = entry.date.split('T')[0];
-      dailyTotals[dateKey] = (dailyTotals[dateKey] || 0) + entry.count;
-    });
+    const dailyTotals = dailyCounts(entries);
 
     // Process entries to create monthly data and marked dates with color coding
-    Object.entries(dailyTotals).forEach(([dateKey, count]) => {
-      const date = new Date(dateKey);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    dailyTotals.forEach((count, dateKey) => {
 
       // Color coding based on cigarette count
       let dotColor = colors.success; // Green for smoke-free days
@@ -185,62 +136,30 @@ export default function HistoryTab() {
         selectedColor
       };
 
-      // Add to monthly data
-      const existingMonth = monthlyData.find(item => item.date === monthKey);
-      if (existingMonth) {
-        existingMonth.cigarettes += count;
-      } else {
-        monthlyData.push({
-          date: monthKey,
-          cigarettes: count
-        });
-      }
     });
-
-    // Sort monthly data
-    monthlyData.sort((a, b) => a.date.localeCompare(b.date));
 
     // Generate weekly data for the current week
-    const today = new Date();
-    const dayOfWeek = today.getDay();
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - dayOfWeek);
-
-    const weeklyData: BarData[] = Array(7).fill(0).map((_, i) => {
-      const currentDate = new Date(startOfWeek);
-      currentDate.setDate(startOfWeek.getDate() + i);
-      const dateKey = currentDate.toISOString().split('T')[0];
-
-      const dayTotal = dailyTotals[dateKey] || 0;
-
-      return {
-        date: dateKey,
-        day: (daysShort && daysShort[i]) || undefined,
-        cigarettes: dayTotal
-      };
-    });
+    const weeklyData: BarData[] = weekSummary(entries, new Date()).map((item, i) => ({
+      ...item, day: daysShort?.[i] ?? item.day,
+    }));
 
     return {
       monthlyData,
       markedDates,
       weeklyData
     };
-  }, [entries, theme, colors]);
+  }, [entries, theme, colors, daysShort]);
 
   // Get encouragement message based on selected date (i18n)
   const getEncouragement = (iso: string) => {
-    const entryCount = entries.filter((e: SmokeEntry) => e.date.startsWith(iso)).reduce((sum: number, e: SmokeEntry) => sum + e.count, 0)
+    const entryCount = dailyCounts(entries).get(iso) ?? 0
     if (entryCount === 0) return t('history.encouragement.zero')
     if (entryCount <= 3) return t('history.encouragement.low')
     return t('history.encouragement.high')
   }
 
   // Calculate selected date total
-  const selectedTotal = selectedDate
-    ? entries
-      .filter((e: SmokeEntry) => e.date.startsWith(selectedDate))
-      .reduce((sum: number, e: SmokeEntry) => sum + e.count, 0)
-    : 0;
+  const selectedTotal = selectedDate ? dailyCounts(entries).get(selectedDate) ?? 0 : 0;
 
   const prevMonthTotal = getMonthlyTrend.monthlyData.length > 1
     ? getMonthlyTrend.monthlyData[getMonthlyTrend.monthlyData.length - 2]?.cigarettes
@@ -833,7 +752,7 @@ export default function HistoryTab() {
               {selectedDate && (
                 <View style={styles.selectedDateContainer}>
                   <Text style={styles.selectedDateText}>
-                    {new Date(selectedDate).toLocaleDateString(undefined, {
+                    {new Date(`${selectedDate}T12:00:00`).toLocaleDateString(undefined, {
                       weekday: "long",
                       year: "numeric",
                       month: "long",
@@ -879,43 +798,21 @@ export default function HistoryTab() {
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>
-                  {(() => {
-                    // Calculate smoke-free days
-                    const dailyTotals: Record<string, number> = {};
-                    entries.forEach(entry => {
-                      const dateKey = entry.date.split('T')[0];
-                      dailyTotals[dateKey] = (dailyTotals[dateKey] || 0) + entry.count;
-                    });
-                    return Object.values(dailyTotals).filter(count => count === 0).length;
-                  })()}
+                  {stats.smokeFreeDays}
                 </Text>
                 <Text style={styles.statLabel}>{theme === 'redMean' ? t('history.summary.daysRed') : t('history.summary.days')}</Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>
-                  ₩{(() => {
-                    // Calculate money saved (assuming ₩4,500 per pack, 20 cigarettes per pack)
-                    const totalCigarettes = entries.reduce((sum, entry) => sum + entry.count, 0);
-                    const packsSaved = totalCigarettes / 20;
-                    const moneySaved = packsSaved * 4500;
-                    return Math.round(moneySaved).toLocaleString();
-                  })()}
+                  {stats.trackedDays}
                 </Text>
-                <Text style={styles.statLabel}>{theme === 'redMean' ? t('history.summary.moneyRed') : t('history.summary.money')}</Text>
+                <Text style={styles.statLabel}>{t('history.summary.trackedDays')}</Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>
-                  {(() => {
-                    // Calculate cigarettes not smoked (based on previous average vs current)
-                    const totalCigarettes = entries.reduce((sum, entry) => sum + entry.count, 0);
-                    // Estimate cigarettes avoided (this is a simplified calculation)
-                    const estimatedAvoidance = Math.max(0, totalCigarettes * 0.3); // Assume 30% reduction
-                    return Math.round(estimatedAvoidance);
-                  })()}
+                  {stats.smokingDays}
                 </Text>
-                <Text style={styles.statLabel}>
-                  {theme === 'redMean' ? t('history.summary.cigsRed') : t('history.summary.cigs')}
-                </Text>
+                <Text style={styles.statLabel}>{t('history.summary.smokingDays')}</Text>
               </View>
             </View>
           </View>
@@ -984,8 +881,7 @@ export default function HistoryTab() {
             {/* Goal vs Actual + Trend */}
             <View style={[styles.analysisRow, { marginTop: 16 }]}> 
               {(() => {
-                const todayKey = new Date().toISOString().split('T')[0]
-                const todayTotal = entries.filter(e => e.date.startsWith(todayKey)).reduce((s, e) => s + e.count, 0)
+                const todayTotal = dailyCounts(entries).get(localDayKey(new Date())) ?? 0
                 const actGoals = getActiveGoals ? getActiveGoals() : []
                 const dailyTarget = actGoals
                   .map(g => g.target)
@@ -1003,20 +899,7 @@ export default function HistoryTab() {
               })()}
 
               {(() => {
-                const today = new Date()
-                const start2 = new Date(today)
-                start2.setDate(today.getDate() - 14)
-                const prevStart = new Date(today)
-                prevStart.setDate(today.getDate() - 28)
-                const prevEnd = new Date(today)
-                prevEnd.setDate(today.getDate() - 15)
-                let recent = 0, previous = 0
-                entries.forEach(e => {
-                  const d = new Date(e.date)
-                  if (d >= start2 && d <= today) recent += e.count
-                  else if (d >= prevStart && d <= prevEnd) previous += e.count
-                })
-                const pct = previous > 0 ? Math.round(((recent - previous) / previous) * 100) : 0
+                const pct = stats.trend
                 const up = pct > 0
                 const msg = pct === 0
                   ? '—'

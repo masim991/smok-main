@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { entriesOnDay, goalCurrent, localDayKey, monthTrend, weekSummary } from '../lib/recordMetrics'
+import { entriesOnDay, goalCurrent, isManualOnlyGoal, localDayKey, monthTrend, weekSummary } from '../lib/recordMetrics'
 
 process.env.TZ = 'Asia/Seoul'
 
@@ -28,5 +28,13 @@ describe('local calendar metrics from UTC timestamps', () => {
     const now = new Date(2026, 9, 14)
     const goal = { type: 'streak' as const, target: 7, startDate: '2026-10-10T00:00:00Z', currentValue: 0 }
     expect(goalCurrent(goal, [{ date: '2026-10-11T03:00:00Z', count: 1 }], now)).toBe(2)
+  })
+
+  it('keeps legacy schedule and baseline goals manual rather than inventing progress', () => {
+    for (const title of ['REDUCE WEAKNESS', 'WEEKEND STRENGTH', 'PROFESSIONAL POWER', 'MORNING DISCIPLINE']) {
+      const goal = { type: 'milestone' as const, target: 12, startDate: '2026-10-01T00:00:00Z', currentValue: 2, redMeanTitle: title }
+      expect(isManualOnlyGoal(goal)).toBe(true)
+      expect(goalCurrent(goal, [], new Date(2026, 9, 14))).toBe(2)
+    }
   })
 })
