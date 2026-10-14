@@ -7,6 +7,7 @@ import { localMemoryStorage } from "@/components/services/storage/LocalMemorySto
 import { notificationService } from "@/components/services/notifications/LocalNotifications"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/contexts/AuthContext"
+import { entriesOnDay, weekSummary, monthTrend, goalCurrent, goalProgress } from "@/lib/recordMetrics"
 
 // 추천 목표 템플릿(초기 선택용)
 export const PRESET_GOALS = [
@@ -452,84 +453,17 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
 
   // 특정 날짜의 기록 반환
   const getEntriesByDate = (date: Date): SmokeEntry[] => {
-    try {
-      const dateString = date.toISOString().split("T")[0]
-      return entries.filter((entry) => entry.date.startsWith(dateString))
-    } catch (error) {
-      console.error("Error getting entries by date:", error)
-      return []
-    }
+    return entriesOnDay(entries, date)
   }
 
   // 최근 1주 요약(요일별 총 개비)
   const getWeeklySummary = (): { day: string; date: string; cigarettes: number }[] => {
-    try {
-      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-      const today = new Date()
-      const weekStart = new Date(today)
-      weekStart.setDate(today.getDate() - today.getDay()) // Start of current week
-
-      return days.map((day, index) => {
-        const currentDate = new Date(weekStart)
-        currentDate.setDate(weekStart.getDate() + index)
-        const dateString = currentDate.toISOString().split("T")[0]
-
-        const dayEntries = entries.filter((entry) => entry.date.startsWith(dateString))
-
-        const totalCigarettes = dayEntries.reduce((sum, entry) => sum + entry.count, 0)
-
-        return {
-          day,
-          date: dateString,
-          cigarettes: totalCigarettes,
-        }
-      })
-    } catch (error) {
-      console.error("Error getting weekly summary:", error)
-      return []
-    }
+    return weekSummary(entries, new Date())
   }
 
   // 이번 달 주차별 평균 추세
   const getMonthlyTrend = (): { week: number; average: number; startDate: string; endDate: string }[] => {
-    try {
-      const result = []
-      const today = new Date()
-      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1)
-      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0)
-
-      const currentStart = new Date(firstDay)
-      let weekNumber = 1
-
-      while (currentStart <= lastDay) {
-        const currentEnd = new Date(currentStart)
-        currentEnd.setDate(currentStart.getDate() + 6)
-        if (currentEnd > lastDay) currentEnd.setDate(lastDay.getDate())
-
-        const weekEntries = entries.filter((entry) => {
-          const entryDate = new Date(entry.date)
-          return entryDate >= currentStart && entryDate <= currentEnd
-        })
-
-        const totalCigarettes = weekEntries.reduce((sum, entry) => sum + entry.count, 0)
-        const daysInWeek = Math.ceil((currentEnd.getTime() - currentStart.getTime() + 1) / (1000 * 60 * 60 * 24))
-
-        result.push({
-          week: weekNumber,
-          average: daysInWeek > 0 ? totalCigarettes / daysInWeek : 0,
-          startDate: currentStart.toISOString().split("T")[0],
-          endDate: currentEnd.toISOString().split("T")[0],
-        })
-
-        currentStart.setDate(currentStart.getDate() + 7)
-        weekNumber++
-      }
-
-      return result
-    } catch (error) {
-      console.error("Error getting monthly trend:", error)
-      return []
-    }
+    return monthTrend(entries, new Date())
   }
 
   // entries 변화에 따라 활성 목표의 진행도 갱신 및 완료 처리
@@ -540,41 +474,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
       const updatedGoals = goals.map((goal) => {
         if (goal.status !== "active") return goal
 
-        let currentValue = 0
-
-        if (goal.type === "reduction") {
-          // For reduction goals, track daily average reduction
-          const weeklyData = getWeeklySummary()
-          const weeklyTotal = weeklyData.reduce((sum, day) => sum + day.cigarettes, 0)
-          currentValue = Math.max(0, goal.target - (weeklyTotal / 7)) // Progress towards reduction
-        } else if (goal.type === "smoke_free_days") {
-          // For smoke-free days, count days with 0 cigarettes this week
-          const smokeFreeDays = getWeeklySummary().filter((day) => day.cigarettes === 0).length
-          currentValue = smokeFreeDays
-        } else if (goal.type === "milestone") {
-          // For milestones, count consecutive days without smoking from today backwards
-          const today = new Date()
-          let consecutiveDays = 0
-          
-          for (let i = 0; i < goal.target; i++) {
-            const checkDate = new Date(today)
-            checkDate.setDate(today.getDate() - i)
-            const dateString = checkDate.toISOString().split("T")[0]
-            
-            const dayEntries = entries.filter(e => e.date.startsWith(dateString))
-            const dayTotal = dayEntries.reduce((sum, e) => sum + e.count, 0)
-            
-            if (dayTotal === 0) {
-              consecutiveDays++
-            } else {
-              break
-            }
-          }
-          currentValue = consecutiveDays
-        }
+        const currentValue = goalCurrent(goal, entries, new Date())
 
         // Check if goal should be completed
-        const shouldComplete = currentValue >= goal.target && goal.status === "active"
+        const shouldComplete = goal.type !== 'reduction' && currentValue >= goal.target && goal.target > 0
         
         // Send notification for goal completion
         if (shouldComplete) {
@@ -607,53 +510,18 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
     } catch (error) {
       console.error("Error updating goals progress:", error)
     }
-  }, [entries, goals, store, getWeeklySummary])
+  }, [entries, goals, store])
 
   // entries 변경 시 진행도 자동 업데이트
   useEffect(() => {
-    if (entries.length > 0) {
+    if (!isLoading) {
       updateGoalsProgress()
     }
-  }, [entries, updateGoalsProgress])
+  }, [entries, updateGoalsProgress, isLoading])
 
   // 개별 목표 진행도 계산(퍼센트)
   const getGoalProgress = (goal: Goal) => {
-    const current = goal.currentValue || 0
-    let progress = 0
-    
-    if (goal.target > 0) {
-      switch (goal.type) {
-        case "reduction":
-          // For reduction goals, progress is based on staying under daily limit
-          const today = new Date().toISOString().split('T')[0]
-          const todayEntries = entries.filter(e => e.date.startsWith(today))
-          const todayCount = todayEntries.reduce((sum, e) => sum + e.count, 0)
-          if (goal.target <= 10) {
-            // Daily limit goals
-            progress = todayCount <= goal.target ? 100 : Math.max(0, 100 - ((todayCount - goal.target) / goal.target) * 50)
-          } else {
-            // Percentage reduction goals
-            progress = Math.min(100, (current / goal.target) * 100)
-          }
-          break
-        case "streak":
-          // For streak goals, progress is consecutive smoke-free days
-          progress = Math.min(100, (current / goal.target) * 100)
-          break
-        case "smoke_free_days":
-        case "milestone":
-        default:
-          // Standard progress calculation
-          progress = Math.min(100, (current / goal.target) * 100)
-          break
-      }
-    }
-    
-    return {
-      current,
-      target: goal.target,
-      progress: Math.round(progress),
-    }
+    return goalProgress(goal, entries, new Date())
   }
 
   const contextValue: DataContextType = {

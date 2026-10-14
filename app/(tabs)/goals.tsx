@@ -11,6 +11,7 @@ import {
 import { useTheme } from '@/contexts/ThemeContext';
 import { useData } from '@/components/contexts/DataContext';
 import type { Goal, GoalType } from '@/components/contexts/DataContext';
+import { entriesOnDay } from '@/lib/recordMetrics';
 import { useTranslation } from 'react-i18next';
 import {
   Check,
@@ -129,7 +130,7 @@ const GOAL_TEMPLATES: GoalTemplate[] = [
 
 function GoalsTab() {
   const { colors, theme } = useTheme();
-  const { goals, addGoal, completeGoal, entries } = useData();
+  const { goals, addGoal, completeGoal, entries, getGoalProgress } = useData();
   const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
   const [showGoalSelection, setShowGoalSelection] = useState(false);
@@ -165,33 +166,13 @@ function GoalsTab() {
   const availableTemplates = GOAL_TEMPLATES;
 
   const calculateGoalProgress = (goal: Goal): number => {
-    const today = new Date().toISOString().split('T')[0];
-    const todayEntries = entries.filter(e => e.date.startsWith(today));
-    const todayCount = todayEntries.reduce((sum, e) => sum + e.count, 0);
-
-    switch (goal.type) {
-      case 'reduction':
-        if (goal.target <= 10) { // Daily limit goals
-          return Math.max(0, 100 - (todayCount / goal.target) * 100);
-        } else { // Percentage reduction goals
-          return Math.min(100, (goal.currentValue / goal.target) * 100);
-        }
-      case 'streak':
-        return Math.min(100, (goal.currentValue / goal.target) * 100);
-      case 'smoke_free_days':
-        return Math.min(100, (goal.currentValue / goal.target) * 100);
-      case 'milestone':
-        return goal.currentValue >= goal.target ? 100 : 0;
-      default:
-        return 0;
-    }
+    return getGoalProgress(goal).progress;
   };
 
   const getMotivationalMessage = () => {
     const activeCount = activeGoals.length;
     const completedCount = completedGoals.length;
-    const today = new Date().toISOString().split('T')[0];
-    const todayEntries = entries.filter(e => e.date.startsWith(today));
+    const todayEntries = entriesOnDay(entries, new Date());
     const todayCount = todayEntries.reduce((sum, e) => sum + e.count, 0);
 
     if (theme === 'redMean') {
