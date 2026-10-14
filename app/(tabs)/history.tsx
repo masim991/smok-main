@@ -15,6 +15,7 @@ import { useData } from "@/components/contexts/DataContext"
 import type { SmokeEntry } from "@/components/contexts/DataContext"
 import { dailyCounts, localDayKey, weekSummary } from '@/lib/recordMetrics'
 import { historyStats, monthBuckets } from '@/lib/historyMetrics'
+import { BarChart, type BarData } from '@/components/history/BarChart'
 import { Calendar as RNCalendar, type DateObject } from "react-native-calendars"
 import {
   Calendar as CalendarIcon,
@@ -26,80 +27,17 @@ import {
 
 
 
-// Types for BarChart props
-interface BarData {
-  day?: string
-  date?: string
-  week?: number
-  average?: number
-  startDate?: string
-  endDate?: string
-  cigarettes: number
-}
-
-interface BarChartProps {
-  data: BarData[]
-  width: number
-  height: number
-  color: string
-  isMonthly?: boolean
-  daysShort?: string[]
-  labels?: string[]
-}
-
-const BarChart = ({ data, width, height, color, isMonthly = false, daysShort, labels }: BarChartProps) => {
-  if (!data || data.length === 0) return null
-
-  const maxValue = Math.max(...data.map((d) => d.cigarettes), 1)
-  const barWidth = (width - 40) / data.length - 10
-
-  const getXAxisLabel = (item: BarData, index: number) => {
-    if (labels && labels[index] !== undefined) return labels[index]
-    if (isMonthly && item.week !== undefined) return `W${item.week}`
-    if (item.day) return item.day.substring(0, 1)
-    const localDays = daysShort ?? ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-    return (localDays[index] || '').substring(0, 1)
-  }
-
-  return (
-    <View style={{ width, height, paddingHorizontal: 20 }}>
-      <View style={{ flex: 1, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end" }}>
-        {data.map((item, index) => (
-          <View key={index} style={{ alignItems: "center" }}>
-            <View
-              style={{
-                width: barWidth,
-                height: (item.cigarettes / maxValue) * (height - 40),
-                backgroundColor: color,
-                borderTopLeftRadius: 4,
-                borderTopRightRadius: 4,
-                marginHorizontal: 5,
-              }}
-            />
-            <Text style={{ fontSize: 10, color: color, marginTop: 4, fontWeight: '600' }}>
-              {getXAxisLabel(item, index)}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </View>
-  )
-}
-
-
-
-
-
 export default function HistoryTab() {
   const { colors, theme } = useTheme()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { entries, getActiveGoals } = useData()
-  const daysShort = t('labels.daysShort', { returnObjects: true }) as string[]
+  const daysShort = useMemo(() => t('labels.daysShort', { returnObjects: true }) as string[], [t, i18n.language])
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'week' | 'month'>('week')
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(true)
   const [isStatsExpanded, setIsStatsExpanded] = useState(true)
   const stats = useMemo(() => historyStats(entries, new Date()), [entries])
+  const dailyTotals = useMemo(() => dailyCounts(entries), [entries])
 
   // Helper function to get monthly trend data and marked dates
   const getMonthlyTrend = useMemo(() => {
@@ -107,8 +45,6 @@ export default function HistoryTab() {
     const markedDates: Record<string, { marked: boolean, dotColor: string, selectedColor?: string }> = {};
 
     // Group entries by date to get daily totals
-    const dailyTotals = dailyCounts(entries);
-
     // Process entries to create monthly data and marked dates with color coding
     dailyTotals.forEach((count, dateKey) => {
 
@@ -148,18 +84,18 @@ export default function HistoryTab() {
       markedDates,
       weeklyData
     };
-  }, [entries, theme, colors, daysShort]);
+  }, [entries, theme, colors, daysShort, dailyTotals]);
 
   // Get encouragement message based on selected date (i18n)
   const getEncouragement = (iso: string) => {
-    const entryCount = dailyCounts(entries).get(iso) ?? 0
+    const entryCount = dailyTotals.get(iso) ?? 0
     if (entryCount === 0) return t('history.encouragement.zero')
     if (entryCount <= 3) return t('history.encouragement.low')
     return t('history.encouragement.high')
   }
 
   // Calculate selected date total
-  const selectedTotal = selectedDate ? dailyCounts(entries).get(selectedDate) ?? 0 : 0;
+  const selectedTotal = selectedDate ? dailyTotals.get(selectedDate) ?? 0 : 0;
 
   const prevMonthTotal = getMonthlyTrend.monthlyData.length > 1
     ? getMonthlyTrend.monthlyData[getMonthlyTrend.monthlyData.length - 2]?.cigarettes

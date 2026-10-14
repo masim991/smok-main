@@ -10,6 +10,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { entriesOnDay, weekSummary, monthTrend, goalCurrent, goalProgress, isManualOnlyGoal } from "@/lib/recordMetrics"
 import { accountDataKey, queueMutation, reconcileRemote, type PendingMutation } from "@/lib/syncPolicy"
 import { errorMessage } from "@/lib/errorMessage"
+import { entryToRemote, goalToRemote, remoteToGoal } from "@/lib/remoteRecords"
 
 // 추천 목표 템플릿(초기 선택용)
 export const PRESET_GOALS = [
@@ -109,24 +110,6 @@ interface DataProviderProps {
 type AccountMutation = PendingMutation<SmokeEntry | Goal>
 type AccountSnapshot = { entries: SmokeEntry[]; goals: Goal[]; pending: AccountMutation[]; legacyImported?: boolean }
 
-const entryToRemote = (entry: SmokeEntry, userId: string) => ({
-  id: entry.id, user_id: userId, date: entry.date, count: entry.count, notes: entry.notes ?? null,
-})
-const goalToRemote = (goal: Goal, userId: string) => ({
-  id: goal.id, user_id: userId, type: goal.type, target: goal.target, start_date: goal.startDate,
-  status: goal.status, current_value: goal.currentValue, title: goal.title, description: goal.description,
-  completed_at: goal.completedAt ?? null, difficulty: goal.difficulty, icon: goal.icon,
-  red_mean_title: goal.redMeanTitle ?? null, red_mean_description: goal.redMeanDescription ?? null,
-})
-
-const remoteToGoal = (g: any): Goal => ({
-  id: g.id, type: g.type, target: g.target, startDate: g.start_date, status: g.status,
-  currentValue: g.current_value, title: g.title, description: g.description,
-  completedAt: g.completed_at ?? undefined, difficulty: g.difficulty, icon: g.icon,
-  redMeanTitle: g.red_mean_title ?? undefined, redMeanDescription: g.red_mean_description ?? undefined,
-})
-
-// 앱 전역에서 기록/목표 데이터를 제공하고 로컬/원격(Supabase) 동기화를 담당
 export const DataProvider: React.FC<DataProviderProps> = ({ children, storage }) => {
   const store = storage ?? localMemoryStorage
   const [entries, setEntries] = useState<SmokeEntry[]>([])
