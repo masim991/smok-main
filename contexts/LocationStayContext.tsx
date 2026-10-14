@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState, AppStateStatus, Platform, Alert } from 'react-native';
 import { isInsideRadius, LatLng } from '@/utils/location';
 import { useData } from '@/components/contexts/DataContext';
+import { flushStayPendingCount, parsePendingCount, STAY_PENDING_COUNT_KEY } from '@/lib/stayPendingCount';
 
 export const LOCATION_STAY_TASK = 'location-stay-monitor-task';
 
@@ -47,7 +48,7 @@ const STORAGE_KEYS = {
   settings: 'stay_monitor_settings',
   runtime: 'stay_monitor_runtime',
   enabled: 'stay_monitor_enabled',
-  pendingCount: 'stay_monitor_pending_count',
+  pendingCount: STAY_PENDING_COUNT_KEY,
 } as const;
 
 export type LocationStayContextValue = {
@@ -117,7 +118,7 @@ TaskManager.defineTask(LOCATION_STAY_TASK, async ({ data, error }) => {
           const newBlocks = Math.max(0, blocks - lastIdx);
           if (newBlocks > 0) {
             const rawPending = await AsyncStorage.getItem(STORAGE_KEYS.pendingCount);
-            const pending = rawPending ? parseInt(rawPending, 10) : 0;
+            const pending = parsePendingCount(rawPending);
             await AsyncStorage.setItem(STORAGE_KEYS.pendingCount, String(pending + newBlocks));
             runtime.lastCountedIndex = blocks;
           }
@@ -184,6 +185,10 @@ export function LocationStayProvider({ children }: { children: React.ReactNode }
   const [runtime, setRuntime] = useState<RuntimeState>(DEFAULT_RUNTIME);
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const { addEntry } = useData();
+  // The polling effect below lives for the whole session; read the latest addEntry so writes target the loaded account.
+  const addEntryRef = useRef(addEntry);
+  addEntryRef.current = addEntry;
+  const flushingPending = useRef(false);
 
   // Load persisted state
   useEffect(() => {
@@ -218,18 +223,17 @@ export function LocationStayProvider({ children }: { children: React.ReactNode }
       try {
         const rawR = await AsyncStorage.getItem(STORAGE_KEYS.runtime);
         if (rawR) setRuntime(JSON.parse(rawR));
-        // Flush pending auto-counts directly into entries
-        const rawP = await AsyncStorage.getItem(STORAGE_KEYS.pendingCount);
-        const pending = rawP ? parseInt(rawP, 10) : 0;
-        if (pending > 0) {
-          await AsyncStorage.setItem(STORAGE_KEYS.pendingCount, '0');
-          try {
-            await addEntry(pending, '[#geofence] dwell');
-          } catch (e) {
-            console.error('Failed to add geofence auto-count entries', e);
-          }
-        }
       } catch {}
+      // Flush pending auto-counts into the active account; the value stays stored until the write succeeds.
+      if (flushingPending.current) return;
+      flushingPending.current = true;
+      try {
+        await flushStayPendingCount(AsyncStorage, count => addEntryRef.current(count, '[#geofence] dwell'));
+      } catch (e) {
+        console.warn('Geofence auto-count kept for retry', e);
+      } finally {
+        flushingPending.current = false;
+      }
     }, 5000);
     return () => {
       sub.remove();
