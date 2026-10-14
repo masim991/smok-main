@@ -817,7 +817,7 @@ export default function HistoryTab() {
             {/* Goal vs Actual + Trend */}
             <View style={[styles.analysisRow, { marginTop: 16 }]}> 
               {(() => {
-                const todayTotal = dailyCounts(entries).get(localDayKey(new Date())) ?? 0
+                const todayTotal = dailyTotals.get(localDayKey(new Date())) ?? 0
                 const actGoals = getActiveGoals ? getActiveGoals() : []
                 const dailyTarget = actGoals
                   .map(g => g.target)
