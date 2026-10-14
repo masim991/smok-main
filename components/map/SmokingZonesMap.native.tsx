@@ -149,7 +149,11 @@ export default function SmokingZonesMap() {
             dwellMapRef.current.set(z.id, { ...rec, notified3min: true });
             if (geofenceAutoCount && !rec.counted) {
               // Auto-add a single cigarette after dwell threshold
-              addEntry(1, `[#geo] zone=${z.title || z.id}; dwell>=3m`).catch(() => {});
+              addEntry(1, `[#geo] zone=${z.title || z.id}; dwell>=3m`).catch(error => {
+                setMapError(error instanceof Error ? error.message : String(error));
+                const latest = dwellMapRef.current.get(z.id);
+                if (latest) dwellMapRef.current.set(z.id, { ...latest, counted: false });
+              });
               dwellMapRef.current.set(z.id, { ...rec, notified3min: true, counted: true });
             }
           }
