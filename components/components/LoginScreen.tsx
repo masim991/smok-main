@@ -1,11 +1,10 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { useAuth } from '@/contexts/AuthContext';
+import { router } from 'expo-router';
 import { useTheme } from '@/contexts/ThemeContext';
 import { UserCheck } from 'lucide-react-native';
 
 export default function LoginScreen() {
-  const { login } = useAuth();
   const { colors } = useTheme();
 
   const styles = StyleSheet.create({
@@ -64,9 +63,9 @@ export default function LoginScreen() {
           Your personal companion for reducing smoking and building healthier habits
         </Text>
         
-        <TouchableOpacity style={styles.button} onPress={login}>
+        <TouchableOpacity style={styles.button} onPress={() => router.push('/auth/login')}>
           <UserCheck size={24} color="#FFFFFF" />
-          <Text style={styles.buttonText}>Continue as Guest</Text>
+          <Text style={styles.buttonText}>Sign in</Text>
         </TouchableOpacity>
       </View>
     </View>

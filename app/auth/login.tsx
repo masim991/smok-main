@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 
 export default function Login() {
   const { colors } = useTheme();
-  const { signIn, loading, isAuthenticated } = useAuth();
+  const { signIn, loading, authError } = useAuth();
   const { language, setLanguage } = useSettings();
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
@@ -63,6 +63,7 @@ export default function Login() {
       </View>
       <Text style={styles.title}>{t('auth.signInTitle')}</Text>
       <Text style={styles.subtitle}>{t('auth.signInSubtitle')}</Text>
+      {authError && <Text accessibilityRole="alert" style={{ color: colors.error, marginBottom: 12 }}>{authError}</Text>}
 
       <TextInput
         style={styles.input}
