@@ -56,6 +56,7 @@
     "signOut": "Sign out"
   },
   "dashboardStay": {
+    "mapNativeOnly": "Map controls are available in the Android and iOS app.",
     "screenTitle": "Dwell alert",
     "sectionTitle": "Smoking zone dwell alert",
     "featureLabel": "Feature",
@@ -94,6 +95,7 @@
     }
   },
   "map": {
+    "nativeOnly": "The map and smoking zone controls are available in the Android and iOS app.",
     "title": "Smoking zone map",
     "useMyLocation": "Use my location",
     "addZone": "Add smoking zone",

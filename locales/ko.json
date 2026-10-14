@@ -69,6 +69,7 @@
     "signOut": "로그아웃"
   },
   "dashboardStay": {
+    "mapNativeOnly": "지도 조작은 Android와 iOS 앱에서 사용할 수 있습니다.",
     "screenTitle": "체류알림",
     "sectionTitle": "흡연 구역 체류 알림",
     "featureLabel": "기능",
@@ -107,6 +108,7 @@
     }
   },
   "map": {
+    "nativeOnly": "지도와 흡연 구역 조작은 Android와 iOS 앱에서 사용할 수 있습니다.",
     "title": "흡연구역 지도",
     "useMyLocation": "내 위치 사용",
     "addZone": "흡연구역 추가",

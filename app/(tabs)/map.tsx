@@ -1,1 +1,1 @@
-﻿export { default } from './map.native';
+﻿export { default } from '@/components/map/SmokingZonesMap'
