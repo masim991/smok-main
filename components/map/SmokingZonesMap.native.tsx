@@ -23,6 +23,7 @@ export default function SmokingZonesMap() {
   const [zones, setZones] = useState<SmokingZone[]>([]);
   const [loading, setLoading] = useState(true);
   const [mapError, setMapError] = useState<string | null>(null);
+  const [autoRecordError, setAutoRecordError] = useState<string | null>(null);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [locationChoiceVisible, setLocationChoiceVisible] = useState(false);
   const [listVisible, setListVisible] = useState(false);
@@ -149,8 +150,10 @@ export default function SmokingZonesMap() {
             dwellMapRef.current.set(z.id, { ...rec, notified3min: true });
             if (geofenceAutoCount && !rec.counted) {
               // Auto-add a single cigarette after dwell threshold
-              addEntry(1, `[#geo] zone=${z.title || z.id}; dwell>=3m`).catch(error => {
-                setMapError(error instanceof Error ? error.message : String(error));
+              addEntry(1, `[#geo] zone=${z.title || z.id}; dwell>=3m`).then(() => {
+                setAutoRecordError(null);
+              }).catch(error => {
+                setAutoRecordError(error instanceof Error ? error.message : String(error));
                 const latest = dwellMapRef.current.get(z.id);
                 if (latest) dwellMapRef.current.set(z.id, { ...latest, counted: false });
               });
@@ -318,6 +321,7 @@ export default function SmokingZonesMap() {
       <View style={[styles.header, { backgroundColor: colors.surface }]}>
         <Text style={[styles.title, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">{t('map.title')}</Text>
         {mapError && <Text accessibilityRole="alert" style={{ color: colors.error }}>{mapError}</Text>}
+        {autoRecordError && <Text accessibilityRole="alert" style={{ color: colors.error }}>{t('map.autoRecordFailed')}: {autoRecordError}</Text>}
       </View>
       <View style={{ flex: 1 }}>
         {region && (

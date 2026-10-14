@@ -95,6 +95,7 @@
     }
   },
   "map": {
+    "autoRecordFailed": "Automatic record failed. Please record it manually",
     "nativeOnly": "The map and smoking zone controls are available in the Android and iOS app.",
     "title": "Smoking zone map",
     "useMyLocation": "Use my location",
