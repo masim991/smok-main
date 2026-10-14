@@ -11,6 +11,8 @@ import {
 import { useTheme } from '@/contexts/ThemeContext';
 import { useData } from '@/components/contexts/DataContext';
 import type { Goal, GoalType } from '@/components/contexts/DataContext';
+import { AVAILABLE_GOAL_TEMPLATES } from '@/lib/goalTemplates';
+import { entriesOnDay, isManualOnlyGoal } from '@/lib/recordMetrics';
 import { useTranslation } from 'react-i18next';
 import {
   Check,
@@ -24,112 +26,9 @@ import {
   Flame
 } from 'lucide-react-native';
 
-interface GoalTemplate {
-  id: string;
-  title: string;
-  redMeanTitle: string;
-  description: string;
-  redMeanDescription: string;
-  type: GoalType;
-  target: number;
-  difficulty: 'easy' | 'medium' | 'hard' | 'extreme';
-  icon: string;
-}
-
-const GOAL_TEMPLATES: GoalTemplate[] = [
-  {
-    id: 'reduce_half',
-    title: 'Cut in Half',
-    redMeanTitle: 'REDUCE WEAKNESS',
-    description: 'Reduce your daily cigarettes by 50%',
-    redMeanDescription: 'PROVE YOU CAN CONTROL YOUR PATHETIC ADDICTION',
-    type: 'reduction',
-    target: 50, // percentage
-    difficulty: 'easy',
-    icon: '📉'
-  },
-  {
-    id: 'daily_limit_3',
-    title: 'Daily Limit: 3',
-    redMeanTitle: 'STRICT DISCIPLINE',
-    description: 'Maximum 3 cigarettes per day',
-    redMeanDescription: 'THREE FAILURES MAXIMUM. NO EXCUSES.',
-    type: 'reduction',
-    target: 3,
-    difficulty: 'medium',
-    icon: '🎯'
-  },
-  {
-    id: 'daily_limit_1',
-    title: 'Single Smoke',
-    redMeanTitle: 'ONE WEAKNESS ONLY',
-    description: 'Only 1 cigarette per day',
-    redMeanDescription: 'ONE PATHETIC CIGARETTE. THAT\'S ALL YOU GET.',
-    type: 'reduction',
-    target: 1,
-    difficulty: 'hard',
-    icon: '🚬'
-  },
-  {
-    id: 'weekend_warrior',
-    title: 'Smoke-Free Weekends',
-    redMeanTitle: 'WEEKEND STRENGTH',
-    description: 'Keep weekends completely smoke-free',
-    redMeanDescription: 'SHOW STRENGTH WHEN IT MATTERS MOST',
-    type: 'smoke_free_days',
-    target: 2,
-    difficulty: 'medium',
-    icon: '🏖️'
-  },
-  {
-    id: 'workday_clean',
-    title: 'Clean Workdays',
-    redMeanTitle: 'PROFESSIONAL POWER',
-    description: 'No smoking during work hours',
-    redMeanDescription: 'BE STRONG AT WORK. NO WEAKNESS ALLOWED.',
-    type: 'smoke_free_days',
-    target: 5,
-    difficulty: 'hard',
-    icon: '💼'
-  },
-  {
-    id: 'week_streak',
-    title: '7-Day Streak',
-    redMeanTitle: 'SEVEN DAY BATTLE',
-    description: 'Go 7 consecutive days smoke-free',
-    redMeanDescription: 'ONE WEEK WITHOUT FAILURE. PROVE YOUR WORTH.',
-    type: 'streak',
-    target: 7,
-    difficulty: 'hard',
-    icon: '🔥'
-  },
-  {
-    id: 'month_champion',
-    title: '30-Day Champion',
-    redMeanTitle: 'MONTH OF POWER',
-    description: 'Complete 30 days without smoking',
-    redMeanDescription: 'THIRTY DAYS OF PURE DISCIPLINE AND STRENGTH',
-    type: 'streak',
-    target: 30,
-    difficulty: 'extreme',
-    icon: '🏆'
-  },
-  {
-    id: 'morning_control',
-    title: 'Morning Control',
-    redMeanTitle: 'MORNING DISCIPLINE',
-    description: 'No cigarettes before 12 PM',
-    redMeanDescription: 'CONTROL YOUR MORNING WEAKNESS',
-    type: 'milestone',
-    target: 12, // hour
-    difficulty: 'easy',
-    icon: '🌅'
-  }
-];
-
 function GoalsTab() {
   const { colors, theme } = useTheme();
-  const { goals, addGoal, completeGoal, entries } = useData();
+  const { goals, addGoal, completeGoal, entries, getGoalProgress } = useData();
   const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
   const [showGoalSelection, setShowGoalSelection] = useState(false);
@@ -161,37 +60,16 @@ function GoalsTab() {
   const activeGoals = goals.filter((g: Goal) => g.status === 'active');
   const completedGoals = goals.filter((g: Goal) => g.status === 'completed');
 
-  // Always show all templates for now - we'll filter later if needed
-  const availableTemplates = GOAL_TEMPLATES;
+  const availableTemplates = AVAILABLE_GOAL_TEMPLATES;
 
   const calculateGoalProgress = (goal: Goal): number => {
-    const today = new Date().toISOString().split('T')[0];
-    const todayEntries = entries.filter(e => e.date.startsWith(today));
-    const todayCount = todayEntries.reduce((sum, e) => sum + e.count, 0);
-
-    switch (goal.type) {
-      case 'reduction':
-        if (goal.target <= 10) { // Daily limit goals
-          return Math.max(0, 100 - (todayCount / goal.target) * 100);
-        } else { // Percentage reduction goals
-          return Math.min(100, (goal.currentValue / goal.target) * 100);
-        }
-      case 'streak':
-        return Math.min(100, (goal.currentValue / goal.target) * 100);
-      case 'smoke_free_days':
-        return Math.min(100, (goal.currentValue / goal.target) * 100);
-      case 'milestone':
-        return goal.currentValue >= goal.target ? 100 : 0;
-      default:
-        return 0;
-    }
+    return getGoalProgress(goal).progress;
   };
 
   const getMotivationalMessage = () => {
     const activeCount = activeGoals.length;
     const completedCount = completedGoals.length;
-    const today = new Date().toISOString().split('T')[0];
-    const todayEntries = entries.filter(e => e.date.startsWith(today));
+    const todayEntries = entriesOnDay(entries, new Date());
     const todayCount = todayEntries.reduce((sum, e) => sum + e.count, 0);
 
     if (theme === 'redMean') {
@@ -232,7 +110,7 @@ function GoalsTab() {
     setIsLoading(true);
     try {
       for (const templateId of selectedTemplates) {
-        const template = GOAL_TEMPLATES.find(tpl => tpl.id === templateId);
+        const template = AVAILABLE_GOAL_TEMPLATES.find(tpl => tpl.id === templateId);
         if (template) {
           const newGoal = {
             type: template.type,
@@ -294,6 +172,7 @@ function GoalsTab() {
 
   const renderGoalCard = (goal: Goal) => {
     const progress = calculateGoalProgress(goal);
+    const manualOnly = isManualOnlyGoal(goal);
     const isRedTheme = theme === 'redMean';
 
     return (
@@ -374,6 +253,8 @@ function GoalsTab() {
         </View>
 
         <View style={{ marginTop: 16 }}>
+          {manualOnly && <Text style={{ color: colors.textSecondary, marginBottom: 8 }}>{t('goals.manualOnly')}</Text>}
+          {!manualOnly && <>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
             <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
               Progress: {goal.currentValue} / {goal.target}
@@ -396,6 +277,7 @@ function GoalsTab() {
               }}
             />
           </View>
+          </>}
           {goal.status === 'completed' && goal.completedAt && (
             <Text style={{
               color: colors.success,
@@ -556,7 +438,7 @@ function GoalsTab() {
             contentContainerStyle={{ paddingBottom: 16 }}
           >
             <View style={styles.goalGrid}>
-              {GOAL_TEMPLATES.map((template) => {
+              {availableTemplates.map((template) => {
                 const isSelected = selectedTemplates.includes(template.id);
                 return (
                   <TouchableOpacity

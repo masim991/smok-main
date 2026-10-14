@@ -22,6 +22,8 @@ export default function SmokingZonesMap() {
   const [myLocation, setMyLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [zones, setZones] = useState<SmokingZone[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [autoRecordError, setAutoRecordError] = useState<string | null>(null);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [locationChoiceVisible, setLocationChoiceVisible] = useState(false);
   const [listVisible, setListVisible] = useState(false);
@@ -31,66 +33,11 @@ export default function SmokingZonesMap() {
   const [newDesc, setNewDesc] = useState('');
   const [clientId, setClientId] = useState<string | null>(null);
   const [selectingOnMap, setSelectingOnMap] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert(t('map.locationPermissionTitle'), t('map.locationPermissionBody'));
-          setLoading(false);
-          return;
-        }
-        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
-        const initialRegion: Region = {
-          latitude: pos.coords.latitude,
-          longitude: pos.coords.longitude,
-          latitudeDelta: 0.01,
-          longitudeDelta: 0.01,
-        };
-        setRegion(initialRegion);
-        setMyLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-        setLoading(false);
-        await fetchZones(initialRegion);
-        try {
-          const id = await getOrCreateClientId();
-          setClientId(id);
-        } catch {}
-        const channel = supabase.channel('zones-changes')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'smoking_zones' }, () => {
-            if (region) fetchZones(region);
-          })
-          .subscribe();
-        try {
-          await notificationService.requestPermissions();
-        } catch {}
-
-        const subscription = await Location.watchPositionAsync(
-          {
-            accuracy: Location.Accuracy.Highest,
-            distanceInterval: 10,
-            timeInterval: 5000,
-          },
-          (loc) => {
-            // Ignore noisy fixes to keep effective accuracy within ~5-10m
-            if (typeof loc.coords.accuracy === 'number' && loc.coords.accuracy > 10) {
-              return;
-            }
-            const current = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
-            setMyLocation(current);
-            checkZoneEntry(current);
-          }
-        );
-
-        return () => {
-          try { subscription.remove(); } catch {}
-          supabase.removeChannel(channel);
-        };
-      } catch (e) {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const latestRef = useRef<{
+    region: Region | null;
+    fetchZones: (region: Region) => Promise<void>;
+    checkZoneEntry: (position: { latitude: number; longitude: number }) => void;
+  } | null>(null);
 
   const getOrCreateClientId = async (): Promise<string> => {
     const key = 'clientId';
@@ -203,7 +150,13 @@ export default function SmokingZonesMap() {
             dwellMapRef.current.set(z.id, { ...rec, notified3min: true });
             if (geofenceAutoCount && !rec.counted) {
               // Auto-add a single cigarette after dwell threshold
-              addEntry(1, `[#geo] zone=${z.title || z.id}; dwell>=3m`).catch(() => {});
+              addEntry(1, `[#geo] zone=${z.title || z.id}; dwell>=3m`).then(() => {
+                setAutoRecordError(null);
+              }).catch(error => {
+                setAutoRecordError(error instanceof Error ? error.message : String(error));
+                const latest = dwellMapRef.current.get(z.id);
+                if (latest) dwellMapRef.current.set(z.id, { ...latest, counted: false });
+              });
               dwellMapRef.current.set(z.id, { ...rec, notified3min: true, counted: true });
             }
           }
@@ -220,25 +173,101 @@ export default function SmokingZonesMap() {
   };
 
   const fetchZones = async (r: Region) => {
-    const latMin = r.latitude - r.latitudeDelta * 0.5;
-    const latMax = r.latitude + r.latitudeDelta * 0.5;
-    const lonMin = r.longitude - r.longitudeDelta * 0.5;
-    const lonMax = r.longitude + r.longitudeDelta * 0.5;
-    const { data, error } = await supabase
-      .from('smoking_zones')
-      .select('*')
-      .gte('latitude', latMin)
-      .lte('latitude', latMax)
-      .gte('longitude', lonMin)
-      .lte('longitude', lonMax)
-      .order('created_at', { ascending: false });
-    if (!error && data) setZones(data as SmokingZone[]);
+    try {
+      const latMin = r.latitude - r.latitudeDelta * 0.5;
+      const latMax = r.latitude + r.latitudeDelta * 0.5;
+      const lonMin = r.longitude - r.longitudeDelta * 0.5;
+      const lonMax = r.longitude + r.longitudeDelta * 0.5;
+      const { data, error } = await supabase
+        .from('smoking_zones')
+        .select('*')
+        .gte('latitude', latMin)
+        .lte('latitude', latMax)
+        .gte('longitude', lonMin)
+        .lte('longitude', lonMax)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setZones((data ?? []) as SmokingZone[]);
+      setMapError(null);
+    } catch (error) {
+      setMapError(error instanceof Error ? error.message : String(error));
+    }
   };
 
   const onRegionChangeComplete = (r: Region) => {
     setRegion(r);
     fetchZones(r);
   };
+
+  latestRef.current = { region, fetchZones, checkZoneEntry };
+
+  useEffect(() => {
+    let disposed = false;
+    let locationSubscription: Location.LocationSubscription | null = null;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const start = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (disposed) return;
+        if (status !== 'granted') {
+          Alert.alert(t('map.locationPermissionTitle'), t('map.locationPermissionBody'));
+          setLoading(false);
+          return;
+        }
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+        if (disposed) return;
+        const initialRegion: Region = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        };
+        setRegion(initialRegion);
+        setMyLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        setLoading(false);
+        await latestRef.current?.fetchZones(initialRegion);
+        if (disposed) return;
+        try {
+          const id = await getOrCreateClientId();
+          if (!disposed) setClientId(id);
+        } catch (error) {
+          if (!disposed) setMapError(error instanceof Error ? error.message : String(error));
+        }
+        if (disposed) return;
+        channel = supabase.channel('zones-changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'smoking_zones' }, () => {
+            const currentRegion = latestRef.current?.region;
+            if (currentRegion) void latestRef.current?.fetchZones(currentRegion);
+          })
+          .subscribe();
+        try { await notificationService.requestPermissions(); } catch {}
+        if (disposed) return;
+        const subscription = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Highest, distanceInterval: 10, timeInterval: 5000 },
+          (loc) => {
+            if (disposed || (typeof loc.coords.accuracy === 'number' && loc.coords.accuracy > 10)) return;
+            const current = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+            setMyLocation(current);
+            latestRef.current?.checkZoneEntry(current);
+          }
+        );
+        if (disposed) subscription.remove();
+        else locationSubscription = subscription;
+      } catch (error) {
+        if (!disposed) {
+          setMapError(error instanceof Error ? error.message : String(error));
+          setLoading(false);
+        }
+      }
+    };
+    void start();
+    return () => {
+      disposed = true;
+      locationSubscription?.remove();
+      if (channel) void supabase.removeChannel(channel);
+    };
+  }, []);
 
   const centerOnMe = async () => {
     if (!myLocation || !mapRef.current) return;
@@ -291,6 +320,8 @@ export default function SmokingZonesMap() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { backgroundColor: colors.surface }]}>
         <Text style={[styles.title, { color: colors.text }]} numberOfLines={1} ellipsizeMode="tail">{t('map.title')}</Text>
+        {mapError && <Text accessibilityRole="alert" style={{ color: colors.error }}>{mapError}</Text>}
+        {autoRecordError && <Text accessibilityRole="alert" style={{ color: colors.error }}>{t('map.autoRecordFailed')}: {autoRecordError}</Text>}
       </View>
       <View style={{ flex: 1 }}>
         {region && (

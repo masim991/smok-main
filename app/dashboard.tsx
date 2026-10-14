@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useData } from '@/components/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -90,7 +90,10 @@ export default function Dashboard() {
           </View>
 
           <View style={styles.footer}>
-            <TouchableOpacity onPress={async () => { await signOut(); router.replace({ pathname: '/auth/login' } as any); }} style={styles.signOutBtn}>
+            <TouchableOpacity onPress={async () => {
+              try { await signOut(); router.replace({ pathname: '/auth/login' } as any); }
+              catch (error) { Alert.alert('Sign out failed', error instanceof Error ? error.message : String(error)); }
+            }} style={styles.signOutBtn}>
               <Text style={styles.signOutText}>Sign Out</Text>
             </TouchableOpacity>
           </View>

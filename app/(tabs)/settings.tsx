@@ -4,108 +4,13 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useSettings } from '@/contexts/SettingsContext';
 import { Bell, BellOff, Palette, Plus, Minus, Moon, Sun, Skull, Target as TargetIcon, Map as MapIcon } from 'lucide-react-native';
 import { notificationService } from '@/components/services/notifications/LocalNotifications';
-import { startBackgroundLocation, stopBackgroundLocation, isBackgroundLocationStarted } from '@/components/services/location/BackgroundLocation';
+import { SettingsSection, BackgroundToggle } from '@/components/settings/SettingsParts';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/components/contexts/DataContext';
 import { startWearableDetection, stopWearableDetection } from '@/components/services/detection/WearableDetection';
 import { startAudioDetection, stopAudioDetection } from '@/components/services/detection/AudioDetection';
 
-type SettingsSectionProps = {
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-  style?: any;
-};
-
-// 설정 섹션 공통 컨테이너 컴포넌트
-const SettingsSection = ({ title, icon, children, style }: SettingsSectionProps) => {
-  const { colors } = useTheme();
-
-  const sectionStyles = StyleSheet.create({
-    section: {
-      margin: 16,
-      borderRadius: 12,
-      borderWidth: 1,
-      overflow: 'hidden',
-      backgroundColor: colors.surface,
-      borderColor: colors.border,
-    },
-    sectionHeader: {
-      padding: 16,
-      flexDirection: 'row',
-      alignItems: 'center',
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    sectionTitle: {
-      fontSize: 16,
-      fontWeight: '600',
-      marginLeft: 12,
-      color: colors.primary,
-    },
-    sectionContent: {
-      padding: 8,
-    },
-  });
-
-  return (
-    <View style={[sectionStyles.section, style]}>
-      <View style={sectionStyles.sectionHeader}>
-        {icon}
-        <Text style={sectionStyles.sectionTitle} numberOfLines={1} ellipsizeMode="tail">{title}</Text>
-      </View>
-      <View style={sectionStyles.sectionContent}>{children}</View>
-    </View>
-  );
-};
-
-function BackgroundToggle() {
-  const { colors } = useTheme();
-  const { t } = useTranslation();
-  const [enabled, setEnabled] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      const started = await isBackgroundLocationStarted();
-      if (mounted) setEnabled(started);
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const onToggle = async (value: boolean) => {
-    try {
-      if (value) {
-        const ok = await startBackgroundLocation();
-        if (!ok) {
-          Alert.alert(t('settings.background.permissionTitle'), t('settings.background.permissionBody'));
-          setEnabled(false);
-          return;
-        }
-        setEnabled(true);
-      } else {
-        await stopBackgroundLocation();
-        setEnabled(false);
-      }
-    } catch (e) {
-      console.error('[BG Toggle] error:', e);
-    }
-  };
-
-  return (
-    <Switch
-      value={enabled}
-      onValueChange={onToggle}
-      trackColor={{ false: colors.border, true: colors.primary }}
-      thumbColor="#FFFFFF"
-    />
-  );
-}
-
-// 설정 탭 메인 컴포넌트: 테마/언어/알림/계정 등 사용자 환경 설정 제공
 export default function SettingsTab() {
   const { colors, theme, setTheme, isRedMeanUnlocked, unlockRedMean } = useTheme();
   const {
@@ -135,7 +40,7 @@ export default function SettingsTab() {
   const [themeToggleCount, setThemeToggleCount] = useState(0);
   const { t } = useTranslation();
   const { user, updateNickname, deleteAccount } = useAuth();
-  const { getActiveGoals, entries, addEntry } = useData();
+  const { getActiveGoals, entries, addEntry, syncError, retrySync, legacyDataAvailable, importLegacyData } = useData();
 
   // 알림 설정 초기화 및 권한 확인
   useEffect(() => {
@@ -397,6 +302,34 @@ export default function SettingsTab() {
         showsVerticalScrollIndicator={false}
         contentInsetAdjustmentBehavior="automatic"
       >
+        {(syncError || legacyDataAvailable) && (
+          <SettingsSection title={t('sync.title')} icon={<Bell size={20} color={colors.primary} />}>
+            {syncError && (
+              <View style={styles.settingCard}>
+                <Text accessibilityRole="alert" style={styles.settingDescription}>{t('sync.problem')} {syncError}</Text>
+                <TouchableOpacity style={[styles.themeButton, { backgroundColor: colors.primary }]} onPress={() => { void retrySync(); }}>
+                  <Text style={styles.themeButtonText}>{t('sync.retry')}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {legacyDataAvailable && user && (
+              <View style={styles.settingCard}>
+                <Text style={styles.settingDescription}>{t('sync.legacy')}</Text>
+                <TouchableOpacity style={[styles.themeButton, { backgroundColor: colors.primary }]} onPress={() => {
+                  Alert.alert(t('sync.import'), t('sync.importConfirm'), [
+                    { text: t('common.cancel'), style: 'cancel' },
+                    { text: t('sync.import'), onPress: async () => {
+                      try { await importLegacyData(); Alert.alert(t('sync.imported')); }
+                      catch (error) { Alert.alert(t('common.error'), String(error)); }
+                    } },
+                  ]);
+                }}>
+                  <Text style={styles.themeButtonText}>{t('sync.import')}</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </SettingsSection>
+        )}
         <SettingsSection
           title={t('settings.profile')}
           icon={<Palette size={20} color={colors.primary} />}

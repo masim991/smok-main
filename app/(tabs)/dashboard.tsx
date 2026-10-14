@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch, TextInput
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
-import MapView, { Marker, Circle, MapPressEvent } from 'react-native-maps';
+import StayMap from '@/components/StayMap';
+import type { StayMapHandle } from '@/components/StayMap.types';
 import * as Location from 'expo-location';
 import { useLocationStay } from '@/contexts/LocationStayContext';
 
@@ -12,7 +13,7 @@ export default function Dashboard() {
   const { signOut, user } = useAuth();
   const { t } = useTranslation();
   const { settings: staySettings, setSettings: setStaySettings, enabled: stayEnabled, toggleEnabled, setFromCurrentLocation, runtime } = useLocationStay();
-  const mapRef = useRef<MapView | null>(null);
+  const mapRef = useRef<StayMapHandle | null>(null);
 
   useEffect(() => {
     if (staySettings.latitude == null || staySettings.longitude == null) {
@@ -99,39 +100,16 @@ export default function Dashboard() {
               </TouchableOpacity>
             </View>
             <View style={styles.map}>
-              <MapView
-                style={{ flex: 1 }}
+              <StayMap
                 ref={mapRef}
-                initialRegion={{
-                  latitude: staySettings.latitude ?? 37.5665,
-                  longitude: staySettings.longitude ?? 126.978,
-                  latitudeDelta: 0.01,
-                  longitudeDelta: 0.01,
-                }}
-                onPress={(e: MapPressEvent) => {
-                  const { latitude, longitude } = e.nativeEvent.coordinate;
-                  setStaySettings({ latitude, longitude });
-                }}
-              >
-                {staySettings.latitude != null && staySettings.longitude != null && (
-                  <>
-                    <Marker
-                      coordinate={{ latitude: staySettings.latitude, longitude: staySettings.longitude }}
-                      draggable
-                      onDragEnd={(e) => {
-                        const { latitude, longitude } = e.nativeEvent.coordinate;
-                        setStaySettings({ latitude, longitude });
-                      }}
-                    />
-                    <Circle
-                      center={{ latitude: staySettings.latitude, longitude: staySettings.longitude }}
-                      radius={staySettings.radius}
-                      strokeColor={colors.primary}
-                      fillColor={theme === 'redMean' ? 'rgba(255,0,0,0.1)' : 'rgba(0,122,255,0.1)'}
-                    />
-                  </>
-                )}
-              </MapView>
+                latitude={staySettings.latitude}
+                longitude={staySettings.longitude}
+                radius={staySettings.radius}
+                color={colors.primary}
+                theme={theme}
+                webMessage={t('dashboardStay.mapNativeOnly')}
+                onSelect={(latitude, longitude) => setStaySettings({ latitude, longitude })}
+              />
             </View>
             <View style={{ marginTop: 12 }}>
               <Text style={{ color: colors.textSecondary }}>

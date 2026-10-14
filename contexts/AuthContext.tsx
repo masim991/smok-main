@@ -13,6 +13,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   user: AuthUser | null;
   loading: boolean;
+  authError: string | null;
   signIn: (email: string, password: string) => Promise<{ error?: string }>; // 이메일/비밀번호 로그인
   signUp: (email: string, password: string, nickname?: string) => Promise<{ error?: string; emailSent?: boolean }>; // 회원가입
   signOut: () => Promise<void>; // 로그아웃
@@ -37,6 +38,7 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // 앱 시작/세션 변경 시 현재 로그인 사용자 상태 동기화
   useEffect(() => {
@@ -44,10 +46,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     const init = async () => {
       try {
-        const { data } = await supabase.auth.getSession();
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
         if (!mounted) return;
+        setAuthError(null);
         const u = data.session?.user ?? null;
         setUser(u ? { id: u.id, email: u.email, nickname: (u.user_metadata as any)?.nickname ?? null } : null);
+      } catch (error) {
+        if (mounted) setAuthError(error instanceof Error ? error.message : String(error));
       } finally {
         if (mounted) setLoading(false);
       }
@@ -112,10 +118,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             updated_at: new Date().toISOString(),
           });
 
-        if (profileError) {
-          console.error('프로필 저장 중 오류 발생:', profileError);
-          // 프로필 저장 실패해도 회원가입 성공으로 처리
-        }
+        if (profileError) return { error: `Account created, but profile save failed: ${profileError.message}` };
       }
 
       return { emailSent: true };
@@ -129,7 +132,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // 로그아웃
   const signOut = async () => {
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   };
 
   // 닉네임 업데이트: auth.user_metadata 갱신 후 로컬 상태 동기화
@@ -145,29 +149,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // 계정 삭제: 앱 데이터(entries/goals/profiles) 삭제 후 Edge Function으로 auth.users 삭제 시도
+  // Only the server function can confirm complete account deletion.
   const deleteAccount = async (): Promise<{ error?: string }> => {
     try {
-      const { data } = await supabase.auth.getUser();
+      const { data, error: getUserError } = await supabase.auth.getUser();
+      if (getUserError) return { error: getUserError.message };
       const uid = data.user?.id;
       if (!uid) return { error: 'Not authenticated' };
-
-      const delEntries = supabase.from('entries').delete().eq('user_id', uid);
-      const delGoals = supabase.from('goals').delete().eq('user_id', uid);
-      const delProfile = supabase.from('profiles').delete().eq('id', uid);
-      const results = await Promise.allSettled([delEntries, delGoals, delProfile]);
-      const rejected = results.find((r) => r.status === 'rejected');
-      if (rejected) return { error: 'Failed to delete some data' };
-
-      // Attempt to call Edge Function to fully delete auth user (requires server setup with service role)
-      try {
-        await supabase.functions.invoke('delete-user', { body: {} });
-      } catch (e) {
-        // ignore; client-side may not have function configured
-        console.log('[Delete] Edge function delete-user not available or failed');
+      const result = await supabase.functions.invoke('delete-user', { body: {} });
+      if (result.error) return { error: result.error.message };
+      if (result.data?.deleted !== true || result.data?.userId !== uid) {
+        return { error: 'Server did not confirm account deletion' };
       }
-
-      await supabase.auth.signOut();
+      const signOutResult = await supabase.auth.signOut();
+      if (signOutResult.error) return { error: `Account deleted, but sign-out failed: ${signOutResult.error.message}` };
       setUser(null);
       return {};
     } catch (e: any) {
@@ -181,6 +176,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isAuthenticated: !!user,
         user,
         loading,
+        authError,
         signIn,
         signUp,
         signOut,

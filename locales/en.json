@@ -15,6 +15,16 @@
     "cancel": "Cancel",
     "save": "Save"
   },
+  "sync": {
+    "title": "Record sync",
+    "problem": "Sync needs attention. Records on this device are preserved.",
+    "retry": "Retry",
+    "legacy": "This device has older records that are not assigned to an account.",
+    "import": "Import into this account",
+    "importConfirm": "Copy the older records into this account. The originals will remain. Confirm that they belong to this account.",
+    "imported": "Older records copied. Check the sync status.",
+    "triggerFailed": "The record was saved on this device, but saving its trigger analysis failed."
+  },
   "auth": {
     "signInTitle": "Sign in",
     "signInSubtitle": "Welcome back. Please sign in to continue.",
@@ -46,6 +56,7 @@
     "signOut": "Sign out"
   },
   "dashboardStay": {
+    "mapNativeOnly": "Map controls are available in the Android and iOS app.",
     "screenTitle": "Dwell alert",
     "sectionTitle": "Smoking zone dwell alert",
     "featureLabel": "Feature",
@@ -84,6 +95,8 @@
     }
   },
   "map": {
+    "autoRecordFailed": "Automatic record failed. Please record it manually",
+    "nativeOnly": "The map and smoking zone controls are available in the Android and iOS app.",
     "title": "Smoking zone map",
     "useMyLocation": "Use my location",
     "addZone": "Add smoking zone",
@@ -152,15 +165,17 @@
     "summary": {
       "title": "Progress summary",
       "titleRed": "Battle stats",
-      "days": "Smoke-free days",
-      "daysRed": "Days survived",
+      "days": "Days without logged smoking",
+      "daysRed": "Days without logged smoking",
+      "trackedDays": "Completed days since first log",
+      "smokingDays": "Days with smoking logged",
       "money": "Money saved",
       "moneyRed": "Money not wasted",
       "cigs": "Cigarettes not smoked",
       "cigsRed": "Cigarettes you couldn't avoid"
     },
     "encouragement": {
-      "zero": "Great job staying smoke-free today! 🎉",
+      "zero": "No smoking was logged on the selected day.",
       "low": "You're doing well. Keep it up! 💪",
       "high": "Every step counts. You can do better tomorrow! 🌟"
     },
@@ -183,6 +198,7 @@
   "goals": {
     "title": "🎯 Goals",
     "titleRed": "⚔️ My missions",
+    "manualOnly": "Legacy goal: the information needed for automatic progress is missing. You can complete it manually.",
     "redMean": {
       "noActive": "You have no active goals. Start now.",
       "activeNoFailures": "You are working on {{count}} goal(s). Today was perfect!",
@@ -284,14 +300,14 @@
       "week_streak": {
         "title": "7-day streak",
         "redMeanTitle": "7-day challenge",
-        "description": "Do not smoke for 7 days",
-        "redMeanDescription": "Stay smoke free for 7 days straight."
+        "description": "Complete 7 consecutive days without logged smoking",
+        "redMeanDescription": "Complete 7 consecutive days without logged smoking."
       },
       "month_champion": {
         "title": "30-day champion",
         "redMeanTitle": "30-day challenge",
-        "description": "Do not smoke for 30 days",
-        "redMeanDescription": "Stay smoke free for 30 days. Prove you can do it."
+        "description": "Complete 30 consecutive days without logged smoking",
+        "redMeanDescription": "Complete 30 consecutive days without logged smoking."
       },
       "morning_control": {
         "title": "No smoking in the morning",
@@ -329,14 +345,14 @@
     "nicknamePromptTitle": "Edit nickname",
     "account": "Account",
     "deleteAccount": "Delete account",
-    "deleteAccountDesc": "All of your data will be permanently deleted.",
+    "deleteAccountDesc": "Delete the server account. Records saved on this device will remain.",
     "deleteConfirmTitle": "Delete your account?",
-    "deleteConfirmBody": "Your account and all records will be deleted. This action cannot be undone.",
-    "deleteWarnTitle": "Are you really giving up?",
-    "deleteWarnBody": "You're getting close to your goals.",
-    "deleteWarnBodyActive": "You currently have {{count}} goal(s) in progress.",
+    "deleteConfirmBody": "Your server account will be deleted. Records saved on this device will remain.",
+    "deleteWarnTitle": "Delete account?",
+    "deleteWarnBody": "Your server account will be deleted. Records saved on this device will remain.",
+    "deleteWarnBodyActive": "You have {{count}} active goal(s). Your server account will be deleted; records saved on this device will remain.",
     "deleteConfirmYes": "Delete account",
-    "deleteConfirmNo": "I'll think again",
+    "deleteConfirmNo": "Cancel",
     "deleting": "Deleting...",
     "deleted": "Your account has been deleted.",
     "reminders": {

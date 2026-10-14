@@ -28,6 +28,16 @@
     "cancel": "취소",
     "save": "저장"
   },
+  "sync": {
+    "title": "기록 동기화",
+    "problem": "동기화에 문제가 있습니다. 기기 기록은 보존됩니다.",
+    "retry": "다시 시도",
+    "legacy": "이 기기에 계정이 지정되지 않은 기존 기록이 있습니다.",
+    "import": "이 계정으로 가져오기",
+    "importConfirm": "기존 기록을 현재 계정에 복사합니다. 원본은 삭제하지 않습니다. 이 계정의 기록이 맞는지 확인하세요.",
+    "imported": "기존 기록을 복사했습니다. 동기화 상태를 확인하세요.",
+    "triggerFailed": "기록은 기기에 저장됐지만 트리거 분석 저장에 실패했습니다."
+  },
   "auth": {
     "signInTitle": "로그인",
     "signInSubtitle": "다시 오신 것을 환영합니다. 계속하려면 로그인하세요.",
@@ -59,6 +69,7 @@
     "signOut": "로그아웃"
   },
   "dashboardStay": {
+    "mapNativeOnly": "지도 조작은 Android와 iOS 앱에서 사용할 수 있습니다.",
     "screenTitle": "체류알림",
     "sectionTitle": "흡연 구역 체류 알림",
     "featureLabel": "기능",
@@ -97,6 +108,8 @@
     }
   },
   "map": {
+    "autoRecordFailed": "자동 기록에 실패했습니다. 직접 기록해 주세요",
+    "nativeOnly": "지도와 흡연 구역 조작은 Android와 iOS 앱에서 사용할 수 있습니다.",
     "title": "흡연구역 지도",
     "useMyLocation": "내 위치 사용",
     "addZone": "흡연구역 추가",
@@ -165,15 +178,17 @@
     "summary": {
       "title": "진행 상황 요약",
       "titleRed": "전투 통계",
-      "days": "금연 일수",
-      "daysRed": "생존 일수",
+      "days": "흡연 기록 없는 날",
+      "daysRed": "흡연 기록 없는 날",
+      "trackedDays": "기록 시작 후 완료된 날",
+      "smokingDays": "흡연 기록이 있는 날",
       "money": "절약한 금액",
       "moneyRed": "낭비하지 않은 금액",
       "cigs": "피우지 않은 담배",
       "cigsRed": "피할 수 없었던 담배"
     },
     "encouragement": {
-      "zero": "오늘 금연을 지켰어요! 정말 잘하셨어요! 🎉",
+      "zero": "선택한 날에는 흡연 기록이 없습니다.",
       "low": "잘하고 있어요. 계속 이어가세요! 💪",
       "high": "모든 걸음이 의미 있어요. 내일은 더 잘할 수 있어요! 🌟"
     },
@@ -196,6 +211,7 @@
   "goals": {
     "title": "🎯 목표",
     "titleRed": "⚔️ 나의 임무",
+    "manualOnly": "이전 버전 목표: 자동 진행률을 계산할 정보가 없어 직접 완료할 수 있습니다.",
     "redMean": {
       "noActive": "활성화된 목표가 없습니다. 지금 시작하세요.",
       "activeNoFailures": "{{count}}개의 목표를 진행 중입니다. 오늘은 완벽했습니다!",
@@ -297,14 +313,14 @@
       "week_streak": {
         "title": "7일 연속",
         "redMeanTitle": "7일 챌린지",
-        "description": "7일 동안 담배를 피우지 마세요",
-        "redMeanDescription": "7일 연속 금연하세요."
+        "description": "기록상 흡연이 없는 날을 7일 연속 이어가세요",
+        "redMeanDescription": "기록상 흡연이 없는 날을 7일 연속 이어가세요."
       },
       "month_champion": {
         "title": "30일 챔피언",
         "redMeanTitle": "30일 챌린지",
-        "description": "30일 동안 담배를 피우지 마세요",
-        "redMeanDescription": "30일 동안 금연하세요. 할 수 있다는 것을 증명하세요."
+        "description": "기록상 흡연이 없는 날을 30일 연속 이어가세요",
+        "redMeanDescription": "기록상 흡연이 없는 날을 30일 연속 이어가세요."
       },
       "morning_control": {
         "title": "아침 금연",
@@ -352,14 +368,14 @@
     "nicknamePromptTitle": "닉네임 수정",
     "account": "계정",
     "deleteAccount": "계정 삭제",
-    "deleteAccountDesc": "모든 데이터가 영구적으로 삭제됩니다.",
+    "deleteAccountDesc": "서버 계정을 삭제합니다. 이 기기에 저장된 기록은 남습니다.",
     "deleteConfirmTitle": "계정을 삭제하시겠습니까?",
-    "deleteConfirmBody": "계정과 모든 기록이 삭제됩니다. 이 작업은 취소할 수 없습니다.",
-    "deleteWarnTitle": "정말 포기하시겠습니까?",
-    "deleteWarnBody": "목표 달성이 얼마 남지 않았습니다.",
-    "deleteWarnBodyActive": "현재 {{count}}개의 목표를 진행 중입니다.",
+    "deleteConfirmBody": "서버 계정을 삭제합니다. 이 기기에 저장된 기록은 남습니다.",
+    "deleteWarnTitle": "계정을 삭제하시겠습니까?",
+    "deleteWarnBody": "서버 계정을 삭제합니다. 이 기기에 저장된 기록은 남습니다.",
+    "deleteWarnBodyActive": "진행 중인 목표 {{count}}개가 있습니다. 서버 계정을 삭제해도 이 기기에 저장된 기록은 남습니다.",
     "deleteConfirmYes": "계정 삭제",
-    "deleteConfirmNo": "다시 생각해볼게요",
+    "deleteConfirmNo": "취소",
     "deleting": "삭제 중...",
     "deleted": "계정이 삭제되었습니다.",
     "reminders": {

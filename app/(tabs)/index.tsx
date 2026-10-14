@@ -7,13 +7,14 @@ import { useData } from '@/components/contexts/DataContext';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { dailyCounts, entriesOnDay, localDayKey } from '@/lib/recordMetrics';
 
 export default function LogTab() {
   const { colors, theme } = useTheme();
   const { entries, addEntry, removeEntry, getEntriesByDate } = useData();
   const { t } = useTranslation();
   const { user } = useAuth();
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(localDayKey(new Date()));
   const [showAddModal, setShowAddModal] = useState(false);
   const [smokeCount, setSmokeCount] = useState('1');
   const [emotion, setEmotion] = useState('');
@@ -21,8 +22,7 @@ export default function LogTab() {
   const [place, setPlace] = useState('');
 
   const getMotivationalMessage = () => {
-    const today = new Date().toISOString().split('T')[0];
-    const todayEntries = entries.filter(e => e.date.startsWith(today));
+    const todayEntries = entriesOnDay(entries, new Date());
     const todayCount = todayEntries.reduce((sum, e) => sum + e.count, 0);
     
     if (todayCount === 0) {
@@ -41,14 +41,10 @@ export default function LogTab() {
     const marks: Record<string, any> = {};
     
     // Group entries by date
-    const entriesByDate: Record<string, number> = {};
-    entries.forEach(entry => {
-      const date = entry.date.split('T')[0];
-      entriesByDate[date] = (entriesByDate[date] || 0) + entry.count;
-    });
+    const entriesByDate = dailyCounts(entries);
     
     // Create marked dates
-    Object.entries(entriesByDate).forEach(([date, count]) => {
+    entriesByDate.forEach((count, date) => {
       let markedColor;
       if (count === 0) {
         markedColor = theme === 'redMean' ? colors.primary : colors.success;
@@ -102,7 +98,7 @@ export default function LogTab() {
   // Get entries for selected date
   const selectedDateEntries = useMemo(() => {
     if (!selectedDate) return [];
-    return entries.filter(e => e.date.startsWith(selectedDate));
+    return entriesOnDay(entries, new Date(`${selectedDate}T12:00:00`));
   }, [entries, selectedDate]);
 
   const handleAddSmoke = async () => {
@@ -124,15 +120,16 @@ export default function LogTab() {
       // Try to upsert trigger record to Supabase (safe fallback)
       if ((emotion || contextText || place) && user) {
         try {
-          await supabase.from('triggers').insert({
+          const { error: triggerError } = await supabase.from('triggers').insert({
             user_id: user.id,
             date: new Date().toISOString(),
             emotion: emotion || null,
             context: contextText || null,
             place: place || null,
           });
+          if (triggerError) throw triggerError;
         } catch (e) {
-          // ignore if table doesn't exist or insert fails
+          Alert.alert(t('common.error'), `${t('sync.triggerFailed')} ${e instanceof Error ? e.message : String(e)}`);
         }
       }
 
