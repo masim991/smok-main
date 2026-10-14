@@ -158,6 +158,20 @@ describe('Phase 0 record regressions', () => {
     expect(mocks.writes).toEqual([]);
   });
 
+  it('blocks writes when account JSON is valid but its record shape is damaged', async () => {
+    const store = await mount([], { id: 'account-a' });
+    const damaged = JSON.stringify({ entries: {}, goals: [], pending: [] });
+    store.data.set(accountDataKey('account-b'), damaged);
+    mocks.user = { id: 'account-b' };
+    await rerender?.();
+    expect(model.syncError).toContain('로컬 데이터 로드 실패');
+    let failure: unknown;
+    await act(async () => { await model.addEntry(1).catch(error => { failure = error; }); });
+    expect(failure).toBeInstanceOf(Error);
+    expect(store.data.get(accountDataKey('account-b'))).toBe(damaged);
+    expect(mocks.writes).toEqual([]);
+  });
+
   it('preserves legacy keys until the user explicitly imports them', async () => {
     const local = { id: 'legacy', date: '2026-10-14T10:00:00.000Z', count: 2 };
     const store = await mount([local]);

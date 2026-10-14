@@ -8,9 +8,10 @@ import { notificationService } from "@/components/services/notifications/LocalNo
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/contexts/AuthContext"
 import { entriesOnDay, weekSummary, monthTrend, goalCurrent, goalProgress, isManualOnlyGoal } from "@/lib/recordMetrics"
-import { accountDataKey, queueMutation, reconcileRemote, type PendingMutation } from "@/lib/syncPolicy"
+import { queueMutation, reconcileRemote, type PendingMutation } from "@/lib/syncPolicy"
 import { errorMessage } from "@/lib/errorMessage"
 import { entryToRemote, goalToRemote, remoteToGoal } from "@/lib/remoteRecords"
+import { readAccountData, readLegacyData, writeAccountData, type AccountMutation, type AccountSnapshot } from "@/lib/accountStorage"
 
 // 추천 목표 템플릿(초기 선택용)
 export const PRESET_GOALS = [
@@ -98,17 +99,10 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined)
 
-const GOALS_STORAGE_KEY = "@SmokeTracker:goals"
-
-const STORAGE_KEY = "@SmokeTracker:entries"
-
 interface DataProviderProps {
   children: ReactNode
   storage?: IStorage // Optional dependency injection for future DB swap
 }
-
-type AccountMutation = PendingMutation<SmokeEntry | Goal>
-type AccountSnapshot = { entries: SmokeEntry[]; goals: Goal[]; pending: AccountMutation[]; legacyImported?: boolean }
 
 export const DataProvider: React.FC<DataProviderProps> = ({ children, storage }) => {
   const store = storage ?? localMemoryStorage
@@ -130,13 +124,8 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
   const blockedMutations = useRef(new Set<string>())
 
   const persist = useCallback(async (snapshot: AccountSnapshot) => {
-    const key = user ? accountDataKey(user.id) : null
     writeQueue.current = writeQueue.current.catch(() => undefined).then(async () => {
-      if (key) await store.setItem(key, JSON.stringify(snapshot))
-      else {
-        await store.setItem(STORAGE_KEY, JSON.stringify(snapshot.entries))
-        await store.setItem(GOALS_STORAGE_KEY, JSON.stringify(snapshot.goals))
-      }
+      await writeAccountData(store, user?.id ?? null, snapshot)
     })
     await writeQueue.current
     if (scopeRef.current === (user?.id ?? 'guest')) {
@@ -249,9 +238,7 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
 
   const importLegacyData = useCallback(async () => {
     if (!user || loadedScope !== user.id) throw new Error('Sign in before importing local records')
-    const pairs = await store.multiGet([STORAGE_KEY, GOALS_STORAGE_KEY])
-    const oldEntries: SmokeEntry[] = JSON.parse(pairs.find(([key]) => key === STORAGE_KEY)?.[1] ?? '[]')
-    const oldGoals: Goal[] = JSON.parse(pairs.find(([key]) => key === GOALS_STORAGE_KEY)?.[1] ?? '[]')
+    const { entries: oldEntries, goals: oldGoals } = await readLegacyData(store)
     await enqueueLocal(async () => {
       const current = snapshotRef.current
       const entryIds = new Set(current.entries.map(item => item.id))
@@ -337,17 +324,14 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
       try {
         let snapshot: AccountSnapshot
         if (user) {
-          const accountJson = await store.getItem(accountDataKey(user.id))
-          snapshot = accountJson ? JSON.parse(accountJson) : { entries: [], goals: [], pending: [] }
-          const legacy = await store.multiGet([STORAGE_KEY, GOALS_STORAGE_KEY])
-          const legacyEntries = legacy.find(([key]) => key === STORAGE_KEY)?.[1]
-          const legacyGoals = legacy.find(([key]) => key === GOALS_STORAGE_KEY)?.[1]
-          if (!cancelled) setLegacyDataAvailable(!snapshot.legacyImported && Boolean((legacyEntries && JSON.parse(legacyEntries).length) || (legacyGoals && JSON.parse(legacyGoals).length)))
+          snapshot = await readAccountData(store, user.id)
+          const legacy = await readLegacyData(store)
+          if (!cancelled) setLegacyDataAvailable(!snapshot.legacyImported && Boolean(legacy.entries.length || legacy.goals.length))
         } else {
-          const pairs = await store.multiGet([STORAGE_KEY, GOALS_STORAGE_KEY])
+          const legacy = await readLegacyData(store)
           snapshot = {
-            entries: JSON.parse(pairs.find(([key]) => key === STORAGE_KEY)?.[1] ?? '[]'),
-            goals: JSON.parse(pairs.find(([key]) => key === GOALS_STORAGE_KEY)?.[1] ?? '[]'),
+            entries: legacy.entries,
+            goals: legacy.goals,
             pending: [],
           }
           if (!cancelled) setLegacyDataAvailable(false)
