@@ -50,7 +50,7 @@ npm run build:web
 npm start
 ```
 
-Phase 1 기준 `npm test`는 29개 테스트가 통과합니다. 기기와 실제 서버 검증은 아직 필요합니다.
+현재 `npm test`는 36개 테스트가 통과합니다. 기기와 실제 서버 검증은 아직 필요합니다.
 
 Android 에뮬레이터 또는 연결된 기기에서는 `npm run android`, macOS의 iOS 시뮬레이터에서는 `npm run ios`를 사용합니다. 위치·알림·오디오 권한 검증에는 실제 기기가 필요할 수 있습니다. `build:web`은 정적 웹 번들 확인이며 네이티브 빌드를 대신하지 않습니다.
 
