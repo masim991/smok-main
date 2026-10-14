@@ -33,7 +33,7 @@ flowchart TD
   Tabs --> Background[components/services/location/BackgroundLocation.ts]
 ```
 
-Expo Router는 `app/`을 라우트 루트로 사용합니다. `app/index.tsx`는 인증 상태에 따라 로그인 또는 대시보드로 이동하며, `app/(tabs)/_layout.tsx`에 대시보드·기록·목표·히스토리·지도·설정 탭이 있습니다. `app/(tabs)/map.tsx`가 플랫폼별 지도 컴포넌트를 참조합니다. `components/app/`은 복제 라우트 후보지만 현재 라우트 루트가 아니므로 삭제하지 않습니다. `components/contexts/DataContext.tsx`는 루트와 여러 화면에서 직접 사용합니다.
+Expo Router는 `app/`을 라우트 루트로 사용합니다. `app/index.tsx`는 인증 상태에 따라 로그인 또는 대시보드로 이동하며, `app/(tabs)/_layout.tsx`에 대시보드·기록·목표·히스토리·지도·설정 탭이 있습니다. `app/(tabs)/map.tsx`가 플랫폼별 지도 컴포넌트를 참조합니다. 참조와 번들 검증을 거친 복제 `components/app/` 라우트는 Phase 2에서 정리했습니다. `components/contexts/DataContext.tsx`는 루트와 여러 화면에서 직접 사용합니다.
 
 기존 로컬 키 `@SmokeTracker:entries`, `@SmokeTracker:goals`와 인증 키 `@SmokeTracker:supabase-auth`는 유지합니다. Phase 1은 계정별 스냅샷을 별도 키에 저장하며 기존 로컬 기록은 설정에서 명시적으로 가져올 수 있습니다. 동기화 및 서버 검증 조건은 [Phase 1 결과](docs/phase1-safety.md)와 [서버 계약](docs/server-contract.md)에 있습니다.
 

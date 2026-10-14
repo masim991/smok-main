@@ -9,6 +9,7 @@
 - `components/history/BarChart.tsx`, `components/settings/SettingsParts.tsx`, `lib/goalTemplates.ts`, `lib/remoteRecords.ts`: 차트, 설정 공통 UI, 목표 템플릿, 원격 레코드 변환을 화면과 DataContext에서 분리했습니다. 기록 집계는 `lib/recordMetrics.ts`와 `lib/historyMetrics.ts`에 있습니다.
 - `app/(tabs)/history.tsx`: 하루별 합계를 화면 렌더 중 한 번 계산해 선택일, 격려 문구, 차트 표시에서 재사용합니다.
 - `app/(tabs)/goals.tsx`: 저장 모델에 기준값/일정이 없어 계산 불가능한 템플릿이 선택 화면에 나타나던 문제를 고쳤습니다. 기존 저장 목표는 유지하고 수동 진행으로 표시합니다.
+- `components/app/`, `components/LoginScreen.tsx`, `components/components/LoginScreen.tsx`: 라우트 루트와 전체 참조 검색에서 실행 경로가 없음을 확인하고 별도 정리 커밋으로 삭제합니다. `components/contexts/DataContext.tsx`는 유지합니다.
 
 ## B. 호환성과 롤백
 
@@ -25,7 +26,7 @@
 | `npx expo export --platform android` | 통과, 6.37 MB Hermes 번들 |
 | `npx expo export --platform ios` | 통과, 6.38 MB Hermes 번들 |
 
-번들 생성은 실제 Android/iOS 설치·권한·백그라운드 동작 검증을 대신하지 않습니다.
+중복 파일 정리 뒤에도 위 명령을 재실행해 통과했습니다. Android/iOS export를 동시에 실행하면 두 프로세스가 같은 `dist`를 지워 `EPERM`이 발생할 수 있으므로 순차 실행했습니다. 번들 생성은 실제 Android/iOS 설치·권한·백그라운드 동작 검증을 대신하지 않습니다.
 
 ## D. 성능 수치와 측정 계획
 
@@ -47,4 +48,4 @@
 
 ## F. 남은 위험과 다음 단계
 
-실기기에서 지도 정리, 중복 백그라운드 태스크, 폴링, 배터리, 자동 기록 오탐을 검증해야 합니다. `DataContext`의 저장·동기화 오케스트레이션과 화면별 큰 JSX는 여전히 추가 분리 후보입니다. `components/app/`과 의존성은 참조 후보 조사만 했으며 안전성 확인 전 삭제하지 않았습니다. 정적 검사와 번들 게이트가 통과해 Phase 3의 **제안 작성**에는 진입할 수 있습니다. 측정 없는 위치 주기 변경과 대규모 화면 재작성은 진행하지 않습니다.
+실기기에서 지도 정리, 중복 백그라운드 태스크, 폴링, 배터리, 자동 기록 오탐을 검증해야 합니다. `DataContext`의 저장·동기화 오케스트레이션과 화면별 큰 JSX는 여전히 추가 분리 후보입니다. 동적 import를 포함한 의존성은 실제 사용 여부가 확실하지 않아 삭제하지 않았습니다. 정적 검사와 번들 게이트가 통과해 Phase 3의 **제안 작성**에는 진입할 수 있습니다. 측정 없는 위치 주기 변경과 대규모 화면 재작성은 진행하지 않습니다.
