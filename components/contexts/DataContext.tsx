@@ -324,6 +324,9 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
   useEffect(() => {
     let cancelled = false
     const loadData = async () => {
+      let loaded = false
+      // Never let a previous account's snapshot back writes for this scope.
+      snapshotRef.current = { entries: [], goals: [], pending: [] }
       setIsLoading(true)
       setLoadedScope(null)
       setSyncError(null)
@@ -355,11 +358,13 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children, storage })
         setEntries(snapshot.entries)
         setGoals(snapshot.goals)
         setPending(snapshot.pending)
+        loaded = true
       } catch (e) {
         if (!cancelled) setSyncError(`로컬 데이터 로드 실패: ${errorMessage(e)}`)
       } finally {
         if (!cancelled) {
-          setLoadedScope(scope)
+          // A failed load stays unloaded so writes and sync are blocked and the stored data is not overwritten.
+          if (loaded) setLoadedScope(scope)
           setIsLoading(false)
         }
       }

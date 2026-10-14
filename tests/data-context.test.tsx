@@ -144,6 +144,20 @@ describe('Phase 0 record regressions', () => {
     expect(model.entries).toEqual([local]);
   });
 
+  it('blocks writes instead of reusing another account after a failed load', async () => {
+    const local = { id: 'a', date: '2026-10-14T10:00:00.000Z', count: 2 };
+    const store = await mount([local], { id: 'account-a' });
+    store.data.set(accountDataKey('account-b'), '{corrupted');
+    mocks.user = { id: 'account-b' };
+    await rerender?.();
+    expect(model.syncError).toContain('로컬 데이터 로드 실패');
+    let failure: unknown;
+    await act(async () => { await model.addEntry(1).catch(error => { failure = error; }); });
+    expect(failure).toBeInstanceOf(Error);
+    expect(store.data.get(accountDataKey('account-b'))).toBe('{corrupted');
+    expect(mocks.writes).toEqual([]);
+  });
+
   it('preserves legacy keys until the user explicitly imports them', async () => {
     const local = { id: 'legacy', date: '2026-10-14T10:00:00.000Z', count: 2 };
     const store = await mount([local]);
