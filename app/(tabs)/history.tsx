@@ -12,9 +12,8 @@ import {
 import { useTheme } from "@/contexts/ThemeContext"
 import { useTranslation } from 'react-i18next'
 import { useData } from "@/components/contexts/DataContext"
-import type { SmokeEntry } from "@/components/contexts/DataContext"
 import { dailyCounts, localDayKey, weekSummary } from '@/lib/recordMetrics'
-import { historyStats, monthBuckets } from '@/lib/historyMetrics'
+import { historyReports, historyStats, monthBuckets } from '@/lib/historyMetrics'
 import { BarChart, type BarData } from '@/components/history/BarChart'
 import { Calendar as RNCalendar, type DateObject } from "react-native-calendars"
 import {
@@ -37,6 +36,7 @@ export default function HistoryTab() {
   const [isCalendarExpanded, setIsCalendarExpanded] = useState(true)
   const [isStatsExpanded, setIsStatsExpanded] = useState(true)
   const stats = useMemo(() => historyStats(entries, new Date()), [entries])
+  const reports = useMemo(() => historyReports(entries), [entries])
   const dailyTotals = useMemo(() => dailyCounts(entries), [entries])
 
   // Helper function to get monthly trend data and marked dates
@@ -766,52 +766,25 @@ export default function HistoryTab() {
             {/* Weekday chart */}
             <Text style={[styles.chartTitle, { color: colors.text }]}>{t('history.reports.weekday')}</Text>
             <View style={styles.chartWrapper}>
-              {(() => {
-                const weekdayBuckets = Array(7).fill(0)
-                entries.forEach((e: SmokeEntry) => {
-                  try {
-                    const d = new Date(e.date)
-                    const day = d.getDay()
-                    weekdayBuckets[day] += e.count
-                  } catch {}
-                })
-                const data = weekdayBuckets.map((v, i) => ({ cigarettes: v, day: daysShort?.[i] || '' }))
-                return (
-                  <BarChart
-                    data={data}
-                    width={Dimensions.get('window').width - 64}
-                    height={160}
-                    color={theme === 'redMean' ? colors.error : colors.primary}
-                    daysShort={daysShort}
-                  />
-                )
-              })()}
+              <BarChart
+                data={reports.weekdays.map((cigarettes, i) => ({ cigarettes, day: daysShort?.[i] || '' }))}
+                width={Dimensions.get('window').width - 64}
+                height={160}
+                color={theme === 'redMean' ? colors.error : colors.primary}
+                daysShort={daysShort}
+              />
             </View>
 
             {/* Hourly chart */}
             <Text style={[styles.chartTitle, { color: colors.text, marginTop: 16 }]}>{t('history.reports.hourly')}</Text>
             <View style={styles.chartWrapper}>
-              {(() => {
-                const hourly = Array(24).fill(0)
-                entries.forEach((e: SmokeEntry) => {
-                  try {
-                    const d = new Date(e.date)
-                    const h = d.getHours()
-                    hourly[h] += e.count
-                  } catch {}
-                })
-                const labels = Array.from({ length: 24 }, (_, i) => (i % 3 === 0 ? String(i) : ''))
-                const data = hourly.map((v) => ({ cigarettes: v }))
-                return (
-                  <BarChart
-                    data={data}
-                    width={Dimensions.get('window').width - 64}
-                    height={160}
-                    color={theme === 'redMean' ? colors.error : colors.primary}
-                    labels={labels}
-                  />
-                )
-              })()}
+              <BarChart
+                data={reports.hours.map(cigarettes => ({ cigarettes }))}
+                width={Dimensions.get('window').width - 64}
+                height={160}
+                color={theme === 'redMean' ? colors.error : colors.primary}
+                labels={Array.from({ length: 24 }, (_, i) => (i % 3 === 0 ? String(i) : ''))}
+              />
             </View>
 
             {/* Goal vs Actual + Trend */}
@@ -862,46 +835,12 @@ export default function HistoryTab() {
             </View>
           </View>
           <View style={styles.sectionContent}>
-            {(() => {
-              // Parse [trg] tags from entry notes
-              const counters = {
-                emotion: new Map<string, number>(),
-                context: new Map<string, number>(),
-                place: new Map<string, number>(),
-              }
-              try {
-                entries.forEach((e: SmokeEntry) => {
-                  if (!e.notes) return
-                  const m = e.notes.match(/\[trg\]\s*([^]+)$/)
-                  if (!m) return
-                  const parts = m[1].split(';').map(s => s.trim())
-                  parts.forEach(p => {
-                    const [k, v] = p.split('=')
-                    if (!v) return
-                    const val = v.trim()
-                    if (!val) return
-                    if (k === 'e') counters.emotion.set(val, (counters.emotion.get(val) || 0) + e.count)
-                    if (k === 'c') counters.context.set(val, (counters.context.get(val) || 0) + e.count)
-                    if (k === 'p') counters.place.set(val, (counters.place.get(val) || 0) + e.count)
-                  })
-                })
-              } catch {}
-
-              const toTop = (m: Map<string, number>) => Array.from(m.entries()).sort((a,b)=>b[1]-a[1]).slice(0,3)
-              const topE = toTop(counters.emotion)
-              const topC = toTop(counters.context)
-              const topP = toTop(counters.place)
-
-              const empty = topE.length===0 && topC.length===0 && topP.length===0
-              if (empty) {
-                return <Text style={{ color: colors.textSecondary, textAlign: 'center' }}>{t('triggers.none')}</Text>
-              }
-
-              return (
-                <View style={{ gap: 12 }}>
+            {reports.emotion.length === 0 && reports.context.length === 0 && reports.place.length === 0
+              ? <Text style={{ color: colors.textSecondary, textAlign: 'center' }}>{t('triggers.none')}</Text>
+              : <View style={{ gap: 12 }}>
                   <View style={styles.card}>
                     <Text style={styles.cardTitle}>{t('triggers.topEmotions')}</Text>
-                    {topE.map(([k,v]) => (
+                    {reports.emotion.map(([k, v]) => (
                       <View key={`e-${k}`} style={styles.listItem}>
                         <Text style={styles.listText}>{k}</Text>
                         <Text style={styles.listCount}>{v}</Text>
@@ -910,7 +849,7 @@ export default function HistoryTab() {
                   </View>
                   <View style={styles.card}>
                     <Text style={styles.cardTitle}>{t('triggers.topContexts')}</Text>
-                    {topC.map(([k,v]) => (
+                    {reports.context.map(([k, v]) => (
                       <View key={`c-${k}`} style={styles.listItem}>
                         <Text style={styles.listText}>{k}</Text>
                         <Text style={styles.listCount}>{v}</Text>
@@ -919,16 +858,15 @@ export default function HistoryTab() {
                   </View>
                   <View style={styles.card}>
                     <Text style={styles.cardTitle}>{t('triggers.topPlaces')}</Text>
-                    {topP.map(([k,v]) => (
+                    {reports.place.map(([k, v]) => (
                       <View key={`p-${k}`} style={styles.listItem}>
                         <Text style={styles.listText}>{k}</Text>
                         <Text style={styles.listCount}>{v}</Text>
                       </View>
                     ))}
                   </View>
-                </View>
-              )
-            })()}
+                </View>}
+
           </View>
         </View>
       </ScrollView>

@@ -51,3 +51,33 @@ export function monthBuckets(entries: readonly DatedEntry[]) {
   }
   return [...buckets].sort(([a], [b]) => a.localeCompare(b)).map(([date, cigarettes]) => ({ date, cigarettes }))
 }
+
+export interface ReportEntry extends DatedEntry { notes?: string }
+
+export function historyReports(entries: readonly ReportEntry[]) {
+  const weekdays = Array<number>(7).fill(0)
+  const hours = Array<number>(24).fill(0)
+  const counters = {
+    emotion: new Map<string, number>(),
+    context: new Map<string, number>(),
+    place: new Map<string, number>(),
+  }
+  for (const entry of entries) {
+    if (!Number.isFinite(entry.count)) continue
+    const date = new Date(entry.date)
+    if (!Number.isNaN(date.getTime())) {
+      weekdays[date.getDay()] += entry.count
+      hours[date.getHours()] += entry.count
+    }
+    const match = entry.notes?.match(/\[trg\]\s*([^]+)$/)
+    if (!match) continue
+    for (const part of match[1].split(';')) {
+      const [kind, rawValue] = part.trim().split('=')
+      const value = rawValue?.trim()
+      const bucket = kind === 'e' ? counters.emotion : kind === 'c' ? counters.context : kind === 'p' ? counters.place : null
+      if (bucket && value) bucket.set(value, (bucket.get(value) ?? 0) + entry.count)
+    }
+  }
+  const top = (bucket: Map<string, number>) => [...bucket.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+  return { weekdays, hours, emotion: top(counters.emotion), context: top(counters.context), place: top(counters.place) }
+}
